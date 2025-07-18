@@ -241,6 +241,7 @@ export const TemplateController = {
     try {
       // Get admin user (assume req.user.id is admin)
       const userId = (req as any).user?.id;
+      console.log(userId);
       if (!userId) {
         return res
           .status(401)

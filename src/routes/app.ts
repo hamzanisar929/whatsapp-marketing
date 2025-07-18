@@ -83,39 +83,39 @@ router.get(
 );
 
 // Message routes
-// router.post(
-//   "/messages/send",
-//   authenticate,
-//   MessageController.MessageController.sendMessage
-// );
-// router.post(
-//   "/messages/send-template",
-//   authenticate,
-//   MessageController.sendTemplateMessage
-// );
-// router.post(
-//   "/messages/send-bulk",
-//   authenticate,
-//   MessageController.sendBulkMessages
-// );
-// router.get(
-//   "/messages/history/:receiver_id",
-//   authenticate,
-//   MessageController.getMessageHistory
-// );
+router.post(
+  "/messages/send",
+  authenticate,
+  MessageController.MessageController.sendMessage
+);
+router.post(
+  "/messages/send-template",
+  authenticate,
+  MessageController.MessageController.sendTemplateMessage
+);
+router.post(
+  "/messages/send-bulk",
+  authenticate,
+  MessageController.MessageController.sendBulkMessages
+);
+router.get(
+  "/messages/history/:receiver_id",
+  authenticate,
+  MessageController.MessageController.getMessageHistory
+);
 // // Bulk messaging CSV upload route
-// router.post(
-//   "/messages/bulk-upload-csv",
-//   authenticate,
-//   upload.single("file"),
-//   MessageController.uploadBulkCSV
-// );
+router.post(
+  "/messages/bulk-upload-csv",
+  authenticate,
+  upload.single("file"),
+  MessageController.MessageController.uploadBulkCSV
+);
 // // Schedule message route
-// router.post(
-//   "/messages/schedule",
-//   authenticate,
-//   MessageController.scheduleMessage
-// );
+router.post(
+  "/messages/schedule",
+  authenticate,
+  MessageController.MessageController.scheduleMessage
+);
 
 // Category routes
 router.get(

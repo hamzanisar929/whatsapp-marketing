@@ -108,6 +108,12 @@
 
     /* Completeness */
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
-    "skipLibCheck": true /* Skip type checking all .d.ts files. */
-  }
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "skipLibCheck": true /* Skip type checking all .d.ts files. */,
+    "resolveJsonModule": true,
+    "typeRoots": ["./node_modules/@types", "./types"]
+  },
+  "include": ["src", "types"],
+  "exclude": ["node_modules"]
 }

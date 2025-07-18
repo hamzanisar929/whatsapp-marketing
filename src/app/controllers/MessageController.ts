@@ -2,14 +2,22 @@ import { Request, Response } from "express";
 import { AppDataSource } from "../../database/connection/dataSource";
 import { Message } from "../../database/entities/Message";
 import { Template } from "../../database/entities/Template";
-import { User } from "../../database/entities/User";
+import { User, UserRole } from "../../database/entities/User";
 import axios from "axios";
 import { parse } from "csv-parse";
 import fs from "fs";
 import cron from "node-cron";
 
+// interface AuthenticatedRequest extends Request {
+//   user: { id: number };
+// }
+
 interface AuthenticatedRequest extends Request {
-  user: { id: number };
+  user?: {
+    id: number;
+    email: string;
+    role: UserRole;
+  };
 }
 
 // Helper: Simple in-memory queue for bulk messaging
@@ -119,7 +127,7 @@ export const MessageController = {
   sendMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { receiver_id, content, template_id, media_url } = req.body;
-      const sender_id = req.user.id;
+      const sender_id = req.user!.id;
 
       const userRepository = AppDataSource.getRepository(User);
       const receiver = await userRepository.findOne({
@@ -215,7 +223,7 @@ export const MessageController = {
   sendTemplateMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { receiver_id, template_id, variables } = req.body;
-      const sender_id = req.user.id;
+      const sender_id = req.user!.id;
 
       const userRepository = AppDataSource.getRepository(User);
       const receiver = await userRepository.findOne({
@@ -297,12 +305,10 @@ export const MessageController = {
       await messageRepository.save(message);
 
       if (waStatus === "failed") {
-        return res
-          .status(500)
-          .json({
-            message: "Failed to send template via WhatsApp API",
-            error: waError,
-          });
+        return res.status(500).json({
+          message: "Failed to send template via WhatsApp API",
+          error: waError,
+        });
       }
 
       return res.status(201).json({
@@ -319,7 +325,7 @@ export const MessageController = {
   sendBulkMessages: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { csv_data, content, template_id } = req.body;
-      const sender_id = req.user.id;
+      const sender_id = req.user!.id;
       if (!csv_data || !Array.isArray(csv_data) || csv_data.length === 0) {
         return res
           .status(400)
@@ -375,7 +381,7 @@ export const MessageController = {
   getMessageHistory: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { receiver_id } = req.params;
-      const sender_id = req.user.id;
+      const sender_id = req.user!.id;
       const userRepository = AppDataSource.getRepository(User);
       const messageRepository = AppDataSource.getRepository(Message);
       const messages = await messageRepository.find({
@@ -434,7 +440,7 @@ export const MessageController = {
     try {
       const { receiver_id, content, template_id, variables, scheduled_at } =
         req.body;
-      const sender_id = req.user.id;
+      const sender_id = req.user!.id;
       if (!receiver_id || !scheduled_at) {
         return res
           .status(400)
