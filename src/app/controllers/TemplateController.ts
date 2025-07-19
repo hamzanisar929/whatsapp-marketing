@@ -4,7 +4,7 @@ import { Template, TemplateStatus } from "../../database/entities/Template";
 import { Variable } from "../../database/entities/TemplateVariable";
 import { TemplateMedia } from "../../database/entities/TemplateMedia";
 import { Category } from "../../database/entities/Category";
-import { User } from "../../database/entities/User";
+import { User, UserRole } from "../../database/entities/User";
 import axios from "axios";
 
 export const TemplateController = {
@@ -43,6 +43,7 @@ export const TemplateController = {
     }
   },
 
+  // Uncomment category_id
   createTemplate: async (req: Request, res: Response) => {
     try {
       const {
@@ -52,6 +53,7 @@ export const TemplateController = {
         message,
         variables,
         is_active,
+        register_to_whatsapp,
       }: {
         name: string;
         language: string;
@@ -63,6 +65,7 @@ export const TemplateController = {
           is_required?: boolean;
         }[];
         is_active?: boolean;
+        register_to_whatsapp?: boolean;
       } = req.body;
 
       const categoryRepository = AppDataSource.getRepository(Category);
@@ -107,6 +110,118 @@ export const TemplateController = {
         where: { id: template.id },
         relations: ["category", "variables"],
       });
+
+      // Register template to WhatsApp Business API if requested
+      let waRegistrationResponse = null;
+      let waRegistrationError = null;
+
+      if (register_to_whatsapp) {
+        // Get admin user with WhatsApp API credentials
+        const userRepository = AppDataSource.getRepository(User);
+        const admin = await userRepository.findOne({
+          where: { role: UserRole.ADMIN },
+        });
+
+        if (
+          !admin ||
+          !admin.whatsapp_api_token ||
+          !admin.whatsapp_business_phone
+        ) {
+          return res.status(400).json({
+            message:
+              "Template created but not registered with WhatsApp: Admin WhatsApp API config missing",
+            template: savedTemplate,
+          });
+        }
+
+        // Prepare components based on variables
+        const components = [];
+        if (variables && variables.length > 0) {
+          const params = variables.map((v) => ({
+            type: "text",
+            text: "{{" + v.name + "}}",
+          }));
+
+          components.push({
+            type: "body",
+            text: message,
+            parameters: params,
+          });
+        } else {
+          components.push({
+            type: "body",
+            text: message,
+          });
+        }
+
+        try {
+          // First, get the WhatsApp Business Account ID
+          // const wbaResponse = await axios.get(
+          //   `https://graph.facebook.com/v17.0/${admin.whatsapp_business_phone}`,
+          //   {
+          //     headers: {
+          //       Authorization: `Bearer ${admin.whatsapp_api_token}`,
+          //       "Content-Type": "application/json",
+          //     },
+          //   }
+          // );
+
+          const whatsappBusinessAccountId = 181499641717304;
+
+          if (!whatsappBusinessAccountId) {
+            return res.status(400).json({
+              message:
+                "Template created but not registered with WhatsApp: Could not retrieve WhatsApp Business Account ID",
+              template: savedTemplate,
+              error: "Missing whatsapp_business_account_id in API response",
+            });
+          }
+
+          // Register template with WhatsApp Business API using the WhatsApp Business Account ID
+          waRegistrationResponse = await axios.post(
+            `https://graph.facebook.com/v17.0/${whatsappBusinessAccountId}/message_templates`,
+            {
+              name: name,
+              category: category.name, // Use standard WhatsApp category instead of custom category name
+              language: language,
+              components: [
+                {
+                  type: "BODY",
+                  text: message,
+                  // parameters:
+                  //   variables && variables.length > 0
+                  //     ? variables.map((v, index) => ({
+                  //         type: "text",
+                  //         text: "{{" + (index + 1) + "}}",
+                  //       }))
+                  //     : [],
+                },
+              ],
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${admin.whatsapp_api_token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          return res.status(201).json({
+            message:
+              "Template created and registered with WhatsApp successfully",
+            template: savedTemplate,
+            whatsapp_registration: waRegistrationResponse.data,
+          });
+        } catch (err: any) {
+          waRegistrationError = err.response?.data || err.message;
+
+          return res.status(201).json({
+            message: "Template created but failed to register with WhatsApp",
+            template: savedTemplate,
+            whatsapp_error: waRegistrationError,
+          });
+        }
+      }
 
       return res.status(201).json({
         message: "Template created successfully",
@@ -262,8 +377,30 @@ export const TemplateController = {
       // Fetch templates from WhatsApp Business API
       let waResponse = null;
       try {
+        // First, get the WhatsApp Business Account ID
+        const wbaResponse = await axios.get(
+          `https://graph.facebook.com/v17.0/${admin.whatsapp_business_phone}`,
+          {
+            headers: {
+              Authorization: `Bearer ${admin.whatsapp_api_token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        const whatsappBusinessAccountId =
+          wbaResponse.data?.whatsapp_business_account_id;
+
+        if (!whatsappBusinessAccountId) {
+          return res.status(400).json({
+            message: "Could not retrieve WhatsApp Business Account ID",
+            error: "Missing whatsapp_business_account_id in API response",
+          });
+        }
+
+        // Now fetch templates using the WhatsApp Business Account ID
         waResponse = await axios.get(
-          `https://graph.facebook.com/v17.0/${admin.whatsapp_business_phone}/message_templates`,
+          `https://graph.facebook.com/v17.0/${whatsappBusinessAccountId}/message_templates`,
           {
             headers: {
               Authorization: `Bearer ${admin.whatsapp_api_token}`,

@@ -3,6 +3,7 @@ import { AppDataSource } from "../../database/connection/dataSource";
 import { Message } from "../../database/entities/Message";
 import { Template } from "../../database/entities/Template";
 import { User, UserRole } from "../../database/entities/User";
+import { Chat } from "../../database/entities/Chat";
 import axios from "axios";
 import { parse } from "csv-parse";
 import fs from "fs";
@@ -257,11 +258,24 @@ export const MessageController = {
         waStatus = "failed";
       }
 
+      const chatRepository = AppDataSource.getRepository(Chat);
+      let chat = await chatRepository.findOne({
+        where: [
+          { sender_id: sender_id, receiver_id: receiver_id },
+          { sender_id: receiver_id, receiver_id: sender_id },
+        ],
+      });
+
+      if (!chat) {
+        chat = chatRepository.create({ sender_id, receiver_id });
+        await chatRepository.save(chat);
+      }
+
       const messageRepository = AppDataSource.getRepository(Message);
       const message = messageRepository.create({
         user_id: sender_id,
         messageable_type: "chat",
-        messageable_id: receiver_id,
+        messageable_id: chat?.id,
         status: waStatus,
         content: content,
       });
@@ -284,6 +298,7 @@ export const MessageController = {
     }
   },
 
+  // Send template Message add chat functionality
   sendTemplateMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { receiver_id, template_id, variables } = req.body;
@@ -334,8 +349,23 @@ export const MessageController = {
       let waError = null;
       let waStatus = "sent";
       try {
+        // First, get the WhatsApp Business Account ID
+        const wbaResponse = await axios.get(
+          `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}`,
+          {
+            headers: {
+              Authorization: `Bearer ${sender.whatsapp_api_token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        const phoneNumberId = sender.whatsapp_business_phone;
+
+        // Send the template message using the phone number ID
+        // Note: For sending messages, we use the phone number ID, not the business account ID
         waResponse = await axios.post(
-          `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
+          `https://graph.facebook.com/v17.0/${phoneNumberId}/messages`,
           {
             messaging_product: "whatsapp",
             to: receiver.phone,
@@ -359,21 +389,34 @@ export const MessageController = {
         waStatus = "failed";
       }
 
-      const messageRepository = AppDataSource.getRepository(Message);
-      const message = messageRepository.create({
-        user_id: sender_id,
-        messageable_type: "chat",
-        messageable_id: receiver_id,
-        status: waStatus,
-      });
-      await messageRepository.save(message);
-
       if (waStatus === "failed") {
         return res.status(500).json({
           message: "Failed to send template via WhatsApp API",
           error: waError,
         });
       }
+
+      const chatRepository = AppDataSource.getRepository(Chat);
+      let chat = await chatRepository.findOne({
+        where: [
+          { sender_id: sender_id, receiver_id: receiver_id },
+          { sender_id: receiver_id, receiver_id: sender_id },
+        ],
+      });
+
+      if (!chat) {
+        chat = chatRepository.create({ sender_id, receiver_id });
+        await chatRepository.save(chat);
+      }
+
+      const messageRepository = AppDataSource.getRepository(Message);
+      const message = messageRepository.create({
+        user_id: sender_id,
+        messageable_type: "template",
+        messageable_id: chat?.id,
+        status: waStatus,
+      });
+      await messageRepository.save(message);
 
       return res.status(201).json({
         message: "Template message sent successfully via WhatsApp API",
@@ -447,22 +490,28 @@ export const MessageController = {
       const { receiver_id } = req.params;
       const sender_id = req.user!.id;
       const userRepository = AppDataSource.getRepository(User);
+      const chatRepository = AppDataSource.getRepository(Chat);
       const messageRepository = AppDataSource.getRepository(Message);
-      const messages = await messageRepository.find({
+
+      const chat = await chatRepository.findOne({
         where: [
-          {
-            user_id: sender_id,
-            messageable_id: Number(receiver_id),
-            messageable_type: "chat",
-          },
-          {
-            user_id: Number(receiver_id),
-            messageable_id: sender_id,
-            messageable_type: "chat",
-          },
+          { sender_id: sender_id, receiver_id: Number(receiver_id) },
+          { sender_id: Number(receiver_id), receiver_id: sender_id },
         ],
+      });
+
+      if (!chat) {
+        return res.status(404).json({ message: "No chat history found." });
+      }
+
+      const messages = await messageRepository.find({
+        where: {
+          messageable_id: chat.id,
+          messageable_type: "chat",
+        },
         order: { created_at: "ASC" },
       });
+
       // Fetch user info for sender and receiver
       const sender = await userRepository.findOne({ where: { id: sender_id } });
       const receiver = await userRepository.findOne({
@@ -473,7 +522,7 @@ export const MessageController = {
         id: msg.id,
         from: msg.user_id === sender_id ? "me" : "them",
         sender_id: msg.user_id,
-        receiver_id: msg.messageable_id,
+        receiver_id: Number(receiver_id),
         content: (msg as any).content,
         status: msg.status,
         created_at: msg.created_at,
