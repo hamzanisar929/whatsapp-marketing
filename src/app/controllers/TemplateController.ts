@@ -4,6 +4,7 @@ import { Template, TemplateStatus } from "../../database/entities/Template";
 import { Variable } from "../../database/entities/TemplateVariable";
 import { TemplateMedia } from "../../database/entities/TemplateMedia";
 import { Category } from "../../database/entities/Category";
+import { User } from "../../database/entities/User";
 import axios from "axios";
 
 export const TemplateController = {
@@ -241,13 +242,13 @@ export const TemplateController = {
     try {
       // Get admin user (assume req.user.id is admin)
       const userId = (req as any).user?.id;
-      console.log(userId);
+      console.log("userId in controller:", userId);
       if (!userId) {
         return res
           .status(401)
           .json({ message: "Unauthorized: user not found in request" });
       }
-      const userRepository = AppDataSource.getRepository("User");
+      const userRepository = AppDataSource.getRepository(User);
       const admin = await userRepository.findOne({ where: { id: userId } });
       if (
         !admin ||

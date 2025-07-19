@@ -37,8 +37,97 @@ async function processBulkQueue() {
   isProcessingQueue = false;
 }
 
+// Also uncomment bulkqueue .push in sendbulkmessage controller
+// async function sendBulkJob(job: any) {
+//   const { sender_id, receiver, content, template_id, variables, attempt } = job;
+//   console.log("Sending bulk message:", job);
+//   try {
+//     // Use the same logic as sendMessage/sendTemplateMessage
+//     const userRepository = AppDataSource.getRepository(User);
+//     const sender = await userRepository.findOne({ where: { id: sender_id } });
+//     if (
+//       !sender ||
+//       !sender.whatsapp_api_token ||
+//       !sender.whatsapp_business_phone
+//     ) {
+//       job.status = "failed";
+//       job.error = "Sender WhatsApp API config missing";
+//       return;
+//     }
+//     let waResponse = null;
+//     let waStatus = "sent";
+//     if (template_id) {
+//       // Template message
+//       const templateRepository = AppDataSource.getRepository(Template);
+//       const template = await templateRepository.findOne({
+//         where: { id: template_id },
+//         relations: ["variables"],
+//       });
+//       if (!template) {
+//         job.status = "failed";
+//         job.error = "Template not found";
+//         return;
+//       }
+//       const components = [];
+//       if (template.variables && variables) {
+//         const params = template.variables.map((v: any) => ({
+//           type: "text",
+//           text: variables[v.name] || v.default_value || "",
+//         }));
+//         components.push({ type: "body", parameters: params });
+//       }
+//       waResponse = await axios.post(
+//         `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
+//         {
+//           messaging_product: "whatsapp",
+//           to: receiver.phone,
+//           type: "template",
+//           template: {
+//             name: template.name,
+//             language: { code: template.language },
+//             components,
+//           },
+//         },
+//         {
+//           headers: {
+//             Authorization: `Bearer ${sender.whatsapp_api_token}`,
+//             "Content-Type": "application/json",
+//           },
+//         }
+//       );
+//     } else {
+//       // Plain text message
+//       waResponse = await axios.post(
+//         `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
+//         {
+//           messaging_product: "whatsapp",
+//           to: receiver.phone,
+//           type: "text",
+//           text: { body: content },
+//         },
+//         {
+//           headers: {
+//             Authorization: `Bearer ${sender.whatsapp_api_token}`,
+//             "Content-Type": "application/json",
+//           },
+//         }
+//       );
+//     }
+//     job.status = "sent";
+//     job.wa_response = waResponse?.data;
+//   } catch (err: any) {
+//     job.status = "failed";
+//     job.error = err.response?.data || err.message;
+//     if ((job.attempt || 1) < MAX_RETRIES) {
+//       // Retry
+//       bulkQueue.push({ ...job, attempt: (job.attempt || 1) + 1 });
+//     }
+//   }
+// }
+
 async function sendBulkJob(job: any) {
-  const { sender_id, receiver, content, template_id, variables, attempt } = job;
+  const { sender_id, receiver, content, variables, attempt } = job;
+  console.log("Sending bulk message:", job);
   try {
     // Use the same logic as sendMessage/sendTemplateMessage
     const userRepository = AppDataSource.getRepository(User);
@@ -54,65 +143,39 @@ async function sendBulkJob(job: any) {
     }
     let waResponse = null;
     let waStatus = "sent";
-    if (template_id) {
-      // Template message
-      const templateRepository = AppDataSource.getRepository(Template);
-      const template = await templateRepository.findOne({
-        where: { id: template_id },
-        relations: ["variables"],
-      });
-      if (!template) {
-        job.status = "failed";
-        job.error = "Template not found";
-        return;
-      }
-      const components = [];
-      if (template.variables && variables) {
-        const params = template.variables.map((v: any) => ({
-          type: "text",
-          text: variables[v.name] || v.default_value || "",
-        }));
-        components.push({ type: "body", parameters: params });
-      }
-      waResponse = await axios.post(
-        `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-        {
-          messaging_product: "whatsapp",
-          to: receiver.phone,
-          type: "template",
-          template: {
-            name: template.name,
-            language: { code: template.language },
-            components,
-          },
+    // Plain text message
+    waResponse = await axios.post(
+      `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: receiver.phone,
+        type: "text",
+        text: { body: content },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${sender.whatsapp_api_token}`,
+          "Content-Type": "application/json",
         },
-        {
-          headers: {
-            Authorization: `Bearer ${sender.whatsapp_api_token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    } else {
-      // Plain text message
-      waResponse = await axios.post(
-        `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-        {
-          messaging_product: "whatsapp",
-          to: receiver.phone,
-          type: "text",
-          text: { body: content },
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${sender.whatsapp_api_token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
+      }
+    );
     job.status = "sent";
     job.wa_response = waResponse?.data;
+
+    const contactUser = await userRepository.findOne({
+      where: { phone: receiver.phone },
+    });
+
+    const messageable_id = contactUser?.id || 0;
+
+    const messageRepository = AppDataSource.getRepository(Message);
+    await messageRepository.save({
+      user_id: sender_id,
+      messageable_type: "chat",
+      messageable_id,
+      status: waStatus,
+      content: content,
+    });
   } catch (err: any) {
     job.status = "failed";
     job.error = err.response?.data || err.message;
@@ -178,7 +241,7 @@ export const MessageController = {
               messaging_product: "whatsapp",
               to: receiver.phone,
               type: "text",
-              text: { body: content },
+              text: { body: content, preview_url: false },
             },
             {
               headers: {
@@ -200,6 +263,7 @@ export const MessageController = {
         messageable_type: "chat",
         messageable_id: receiver_id,
         status: waStatus,
+        content: content,
       });
       await messageRepository.save(message);
 
@@ -337,7 +401,7 @@ export const MessageController = {
           sender_id,
           receiver: { phone: row.phone },
           content,
-          template_id,
+          // template_id,
           variables: row,
           attempt: 1,
         });
