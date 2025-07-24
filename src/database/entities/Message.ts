@@ -7,10 +7,10 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
-} from 'typeorm';
-import { User } from './User';
+} from "typeorm";
+import { User } from "./User";
 
-@Entity('messages')
+@Entity("messages")
 export class Message {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -36,13 +36,20 @@ export class Message {
   @Column({ type: "text", nullable: true })
   content?: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'user_id' })
+  // ✅ New columns for media
+  @Column({ type: "text", nullable: true })
+  media_url?: string;
+
+  @Column({ type: "varchar", length: 20, nullable: true })
+  media_type?: "image" | "video" | "document";
+
+  @ManyToOne(() => User, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "user_id" })
   user?: User;
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: "created_at" })
   created_at!: Date;
 
-  @UpdateDateColumn({ name: 'updated_at' })
+  @UpdateDateColumn({ name: "updated_at" })
   updated_at!: Date;
 }

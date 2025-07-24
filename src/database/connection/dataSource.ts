@@ -28,5 +28,5 @@ export const AppDataSource = new DataSource({
     TemplateMedia,
     Variable,
   ],
-  migrations: ["./src/database/migrations/*.ts"],
+  migrations: ["../migrations/*.ts"],
 });
