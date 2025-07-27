@@ -193,4 +193,14 @@ router.put("/contacts/:id", authenticate, UserController.updateContact);
 router.post("/contacts/:id/tags", authenticate, UserController.tagContact);
 router.get("/contacts", authenticate, UserController.getContacts);
 
+// WhatsApp Webhook routes (no authentication required for webhooks)
+router.get(
+  "/webhook/whatsapp",
+  MessageController.MessageController.verifyWebhook
+);
+router.post(
+  "/webhook/whatsapp",
+  MessageController.MessageController.receiveWebhook
+);
+
 export default router;

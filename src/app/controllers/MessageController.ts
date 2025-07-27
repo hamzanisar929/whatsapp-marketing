@@ -39,6 +39,200 @@ async function processBulkQueue() {
   isProcessingQueue = false;
 }
 
+// Process incoming WhatsApp messages
+async function processIncomingMessage(messageData: any) {
+  try {
+    console.log("🔄 Step 2: Processing incoming message data");
+    console.log("📊 Message data:", JSON.stringify(messageData, null, 2));
+
+    const { messages, contacts, metadata } = messageData;
+
+    if (!messages || messages.length === 0) {
+      console.log("⚠️ No messages to process in webhook data");
+      return; // No messages to process
+    }
+
+    console.log(`📨 Found ${messages.length} message(s) to process`);
+
+    const userRepository = AppDataSource.getRepository(User);
+    const chatRepository = AppDataSource.getRepository(Chat);
+    const messageRepository = AppDataSource.getRepository(Message);
+
+    for (const message of messages) {
+      const { from, text, type, timestamp, id: wa_message_id } = message;
+      console.log(
+        `\n🔄 Processing message from ${from}, type: ${type}, ID: ${wa_message_id}`
+      );
+
+      console.log("🔍 Step 2a: Looking for existing contact by phone number");
+      // Find the contact (sender) by phone number
+      let contact = await userRepository.findOne({
+        where: { phone: from },
+      });
+
+      // If contact doesn't exist, create a new one
+      if (!contact) {
+        console.log("➕ Step 2b: Contact not found - Creating new contact");
+        
+        // Extract name from contacts array if available
+        let firstName = "";
+        let lastName = "";
+        
+        if (contacts && contacts.length > 0) {
+          // Try to find contact by wa_id matching the from number (without +)
+          let contactInfo = contacts.find((c: any) => c.wa_id === from.replace("+", ""));
+          
+          // If not found, just use the first contact in the array (WhatsApp usually sends the sender's info)
+          if (!contactInfo && contacts[0]) {
+            contactInfo = contacts[0];
+          }
+          
+          if (contactInfo && contactInfo.profile && contactInfo.profile.name) {
+            const fullName = contactInfo.profile.name.trim();
+            const nameParts = fullName.split(" ");
+            firstName = nameParts[0] || "";
+            lastName = nameParts.slice(1).join(" ") || "";
+            console.log(`📝 Extracted name: ${firstName} ${lastName}`);
+          }
+        }
+        
+        contact = userRepository.create({
+          phone: from,
+          email: `${from}@whatsapp.temp`, // Temporary email
+          password: "temp_password", // Will need to be hashed
+          first_name: firstName,
+          last_name: lastName,
+          role: "USER" as any,
+          opt_in: true,
+          last_contacted: new Date(),
+        });
+        await userRepository.save(contact);
+        console.log(`✅ Step 2b: New contact created with ID: ${contact.id}`);
+      } else {
+        console.log(
+          `✅ Step 2b: Existing contact found with ID: ${contact.id}`
+        );
+      }
+
+      console.log("🔍 Step 2c: Looking for business user by phone number ID");
+      // Find the business user (receiver) - this should be the user who has WhatsApp API configured
+      const businessUser = await userRepository.findOne({
+        where: {
+          whatsapp_business_phone: metadata?.phone_number_id,
+        },
+      });
+
+      if (!businessUser) {
+        console.error(
+          "❌ Business user not found for phone number ID:",
+          metadata?.phone_number_id
+        );
+        continue;
+      }
+
+      console.log(
+        `✅ Step 2c: Business user found with ID: ${businessUser.id}`
+      );
+
+      console.log(
+        "🔍 Step 3: Looking for existing chat between contact and business user"
+      );
+      // Find or create chat between contact and business user
+      let chat = await chatRepository.findOne({
+        where: [
+          { sender_id: contact.id, receiver_id: businessUser.id },
+          { sender_id: businessUser.id, receiver_id: contact.id },
+        ],
+      });
+
+      if (!chat) {
+        console.log("➕ Step 3: Chat not found - Creating new chat");
+        chat = chatRepository.create({
+          sender_id: contact.id,
+          receiver_id: businessUser.id,
+        });
+        await chatRepository.save(chat);
+        console.log(`✅ Step 3: New chat created with ID: ${chat.id}`);
+      } else {
+        console.log(`✅ Step 3: Existing chat found with ID: ${chat.id}`);
+      }
+
+      console.log(`🔄 Step 4: Processing message content for type: ${type}`);
+      // Extract message content based on type
+      let content = "";
+      let media_url: string | undefined = undefined;
+      let media_type: "image" | "video" | "document" | undefined = undefined;
+
+      if (type === "text" && text) {
+        content = text.body;
+        console.log(`📝 Text message content: ${content}`);
+      } else if (type === "image" && message.image) {
+        media_url = message.image.id; // WhatsApp media ID
+        media_type = "image";
+        content = message.image.caption || "";
+        console.log(
+          `🖼️ Image message - Caption: ${content}, Media ID: ${media_url}`
+        );
+      } else if (type === "video" && message.video) {
+        media_url = message.video.id;
+        media_type = "video";
+        content = message.video.caption || "";
+        console.log(
+          `🎥 Video message - Caption: ${content}, Media ID: ${media_url}`
+        );
+      } else if (type === "document" && message.document) {
+        media_url = message.document.id;
+        media_type = "document";
+        content = message.document.caption || message.document.filename || "";
+        console.log(
+          `📄 Document message - Caption: ${content}, Media ID: ${media_url}`
+        );
+      } else if (type === "audio" && message.audio) {
+        // Note: audio is not in the media_type enum, so we'll treat it as document
+        media_url = message.audio.id;
+        media_type = "document";
+        content = "Audio message";
+        console.log(`🎵 Audio message - Media ID: ${media_url}`);
+      } else {
+        console.log(`⚠️ Unsupported message type: ${type}`);
+      }
+
+      console.log("💾 Step 4: Storing message in database");
+      // Save the incoming message
+      const incomingMessage = messageRepository.create({
+        user_id: contact.id, // The contact who sent the message
+        messageable_type: "chat",
+        messageable_id: chat.id,
+        status: "received", // Mark as received
+        content,
+        media_url,
+        media_type,
+        is_scheduled: false,
+        // Note: created_at will be automatically set by @CreateDateColumn
+        // Store WhatsApp message ID for reference
+        // wa_message_id: wa_message_id // You might want to add this field to Message entity
+      });
+
+      await messageRepository.save(incomingMessage);
+      console.log(`✅ Step 4: Message saved with ID: ${incomingMessage.id}`);
+
+      console.log("🔄 Step 4b: Updating contact's last_contacted timestamp");
+      // Update contact's last_contacted timestamp
+      contact.last_contacted = new Date();
+      await userRepository.save(contact);
+      console.log(
+        `✅ Step 4b: Contact updated - last_contacted: ${contact.last_contacted}`
+      );
+
+      console.log(`Incoming message saved from ${from}: ${content}`);
+    }
+
+    console.log("✅ All messages processed successfully");
+  } catch (error) {
+    console.error("❌ Error processing incoming message:", error);
+  }
+}
+
 // Also uncomment bulkqueue .push in sendbulkmessage controller
 // async function sendBulkJob(job: any) {
 //   const { sender_id, receiver, content, template_id, variables, attempt } = job;
@@ -291,6 +485,68 @@ async function sendBulkJob(job: any) {
 }
 
 export const MessageController = {
+  // WhatsApp Webhook verification endpoint
+  verifyWebhook: async (req: Request, res: Response) => {
+    try {
+      const mode = req.query["hub.mode"];
+      const token = req.query["hub.verify_token"];
+      const challenge = req.query["hub.challenge"];
+
+      // Verify the webhook with your verify token
+      const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+
+      if (mode === "subscribe" && token === VERIFY_TOKEN) {
+        console.log("Webhook verified successfully!");
+        return res.status(200).send(challenge);
+      } else {
+        console.log("Webhook verification failed");
+        return res.status(403).send("Forbidden");
+      }
+    } catch (error) {
+      console.error("Webhook verification error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
+  // WhatsApp Webhook endpoint for receiving incoming messages
+  receiveWebhook: async (req: Request, res: Response) => {
+    try {
+      console.log("🔄 Step 1: Webhook received - Processing incoming message");
+      console.log("📥 Webhook payload:", JSON.stringify(req.body, null, 2));
+
+      const body = req.body;
+
+      // Check if this is a WhatsApp webhook event
+      if (body.object === "whatsapp_business_account") {
+        console.log("✅ Valid WhatsApp Business Account webhook detected");
+
+        // Process each entry in the webhook
+        for (const entry of body.entry) {
+          console.log(`📋 Processing entry ID: ${entry.id}`);
+
+          for (const change of entry.changes) {
+            console.log(`🔄 Processing change field: ${change.field}`);
+
+            if (change.field === "messages") {
+              console.log(
+                "📨 Message field detected - calling processIncomingMessage"
+              );
+              await processIncomingMessage(change.value);
+            }
+          }
+        }
+      } else {
+        console.log("❌ Invalid webhook object type:", body.object);
+      }
+
+      console.log("✅ Step 5: Returning 200 OK status");
+      // Always respond with 200 OK to acknowledge receipt
+      return res.status(200).send("OK");
+    } catch (error) {
+      console.error("❌ Webhook processing error:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  },
   sendMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { receiver_id, content, template_id, media_url, media_type } =
