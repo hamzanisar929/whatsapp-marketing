@@ -9,6 +9,13 @@ import axios from "axios";
 import { parse } from "csv-parse";
 import fs from "fs";
 import cron from "node-cron";
+import SocketServer from "../socket/SocketServer";
+import { LogActivityController } from "./LogActivityController";
+
+// Global type declaration for socketServer
+declare global {
+  var socketServer: SocketServer;
+}
 
 // interface AuthenticatedRequest extends Request {
 //   user: { id: number };
@@ -215,6 +222,49 @@ async function processIncomingMessage(messageData: any) {
 
       await messageRepository.save(incomingMessage);
       console.log(`✅ Step 4: Message saved with ID: ${incomingMessage.id}`);
+
+      // Emit real-time Socket.IO events
+      console.log("🔌 Step 4a: Emitting real-time events via Socket.IO");
+      try {
+        // Emit to specific chat room
+        global.socketServer.emitNewMessage(chat.id, {
+          id: incomingMessage.id,
+          content,
+          media_url,
+          media_type,
+          sender: {
+            id: contact.id,
+            first_name: contact.first_name,
+            last_name: contact.last_name,
+            phone: contact.phone
+          },
+          chat_id: chat.id,
+          status: 'received',
+          created_at: incomingMessage.created_at
+        });
+
+        // Emit WhatsApp notification to business agents
+        global.socketServer.emitWhatsAppMessage(businessUser.id, chat.id, {
+          id: incomingMessage.id,
+          content,
+          media_url,
+          media_type,
+          from: contact.phone,
+          contact: {
+            id: contact.id,
+            first_name: contact.first_name,
+            last_name: contact.last_name,
+            phone: contact.phone
+          },
+          wa_message_id,
+          timestamp: new Date()
+        });
+
+        console.log(`🔌 Real-time events emitted for chat ${chat.id}`);
+      } catch (socketError) {
+        console.error("⚠️ Socket.IO emission error:", socketError);
+        // Don't fail the entire process if socket emission fails
+      }
 
       console.log("🔄 Step 4b: Updating contact's last_contacted timestamp");
       // Update contact's last_contacted timestamp
@@ -664,6 +714,13 @@ export const MessageController = {
         });
       }
 
+      // Log user activity
+      try {
+        await LogActivityController.logUserActivity(sender_id, `Sent message to ${receiver.first_name} ${receiver.last_name}`);
+      } catch (logError) {
+        console.error("Failed to log user activity:", logError);
+      }
+
       return res.status(201).json({
         message: "Message sent successfully via WhatsApp API",
         data: message,
@@ -795,6 +852,13 @@ export const MessageController = {
       });
       await messageRepository.save(message);
 
+      // Log user activity
+      try {
+        await LogActivityController.logUserActivity(sender_id, `Sent template message '${template.name}' to ${receiver.first_name} ${receiver.last_name}`);
+      } catch (logError) {
+        console.error("Failed to log user activity:", logError);
+      }
+
       return res.status(201).json({
         message: "Template message sent successfully via WhatsApp API",
         data: message,
@@ -886,6 +950,13 @@ export const MessageController = {
       }
 
       await processBulkQueue();
+
+      // Log user activity
+      try {
+        await LogActivityController.logUserActivity(sender_id, `Initiated bulk message to ${users.length} recipients`);
+      } catch (logError) {
+        console.error("Failed to log user activity:", logError);
+      }
 
       return res.status(200).json({
         message: "Bulk messages are being processed",

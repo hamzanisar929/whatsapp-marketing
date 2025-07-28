@@ -3,6 +3,7 @@ import { AppDataSource } from "../../database/connection/dataSource";
 import { User, UserRole, UserStatus } from "../../database/entities/User";
 import * as bcrypt from "bcrypt";
 import * as jwt from "jsonwebtoken";
+import { LogActivityController } from "./LogActivityController";
 
 interface RegisterRequestBody {
   first_name: string;
@@ -66,6 +67,13 @@ export const register = async (
       { expiresIn: "24h" }
     );
 
+    // Log user activity
+    try {
+      await LogActivityController.logUserActivity(user.id, `User registered: ${user.email}`);
+    } catch (logError) {
+      console.error("Failed to log user activity:", logError);
+    }
+
     return res.status(201).json({
       message: "User registered successfully",
       token,
@@ -108,6 +116,13 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
       process.env.JWT_SECRET as string,
       { expiresIn: "24h" }
     );
+
+    // Log user activity
+    try {
+      await LogActivityController.logUserActivity(user.id, `User logged in: ${user.email}`);
+    } catch (logError) {
+      console.error("Failed to log user activity:", logError);
+    }
 
     return res.status(200).json({
       message: "Login successful",

@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "ts-node index.ts",
     "dev": "nodemon index.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "typeorm": "ts-node --esm ./node_modules/typeorm/cli.js",
@@ -16,6 +16,7 @@
   "license": "ISC",
   "dependencies": {
     "@types/csv-stringify": "^1.4.3",
+    "@types/socket.io": "^3.0.1",
     "axios": "^1.6.8",
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",
@@ -31,6 +32,8 @@
     "mysql2": "^3.14.1",
     "node-cron": "^3.0.3",
     "reflect-metadata": "^0.2.2",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "typeorm": "^0.3.25"
   },
   "devDependencies": {

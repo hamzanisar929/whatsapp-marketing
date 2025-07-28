@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../../database/connection/dataSource";
 import { Tag } from "../../database/entities/Tag";
+import { LogActivityController } from "./LogActivityController";
 
 export const TagController = {
   getAllTags: async (req: Request, res: Response) => {
@@ -44,6 +45,16 @@ export const TagController = {
 
       await tagRepository.save(tag);
 
+      // Log user activity
+      try {
+        const authReq = req as any;
+        if (authReq.user?.id) {
+          await LogActivityController.logUserActivity(authReq.user.id, `Created tag: ${tag.name} for ${tag.taggable_type}`);
+        }
+      } catch (logError) {
+        console.error("Failed to log user activity:", logError);
+      }
+
       return res.status(201).json({
         message: "Tag created successfully",
         tag,
@@ -63,6 +74,16 @@ export const TagController = {
 
       if (!tag) {
         return res.status(404).json({ message: "Tag not found" });
+      }
+
+      // Log user activity before deletion
+      try {
+        const authReq = req as any;
+        if (authReq.user?.id) {
+          await LogActivityController.logUserActivity(authReq.user.id, `Deleted tag: ${tag.name} from ${tag.taggable_type}`);
+        }
+      } catch (logError) {
+        console.error("Failed to log user activity:", logError);
       }
 
       await tagRepository.remove(tag);

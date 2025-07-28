@@ -11,6 +11,7 @@ import * as TemplateController from "../app/controllers/TemplateController";
 import * as MessageController from "../app/controllers/MessageController";
 import * as CategoryController from "../app/controllers/CategoryController";
 import * as TagController from "../app/controllers/TagController";
+import { LogActivityController } from "../app/controllers/LogActivityController";
 
 // Import middleware
 import {
@@ -201,6 +202,40 @@ router.get(
 router.post(
   "/webhook/whatsapp",
   MessageController.MessageController.receiveWebhook
+);
+
+// Log Activity routes
+router.get(
+  "/log-activities",
+  authenticate,
+  LogActivityController.getAllLogActivities
+);
+router.get(
+  "/log-activities/:id",
+  authenticate,
+  LogActivityController.getLogActivityById
+);
+router.get(
+  "/log-activities/user/:userId",
+  authenticate,
+  LogActivityController.getLogActivitiesByUserId
+);
+router.post(
+  "/log-activities",
+  authenticate,
+  LogActivityController.createLogActivity
+);
+router.put(
+  "/log-activities/:id",
+  authenticate,
+  authorize([UserRole.ADMIN]),
+  LogActivityController.updateLogActivity
+);
+router.delete(
+  "/log-activities/:id",
+  authenticate,
+  authorize([UserRole.ADMIN]),
+  LogActivityController.deleteLogActivity
 );
 
 export default router;

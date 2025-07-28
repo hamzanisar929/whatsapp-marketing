@@ -6,6 +6,7 @@ import { parse } from "csv-parse";
 import { stringify } from "csv-stringify";
 import fs from "fs";
 import { Tag } from "../../database/entities/Tag";
+import { LogActivityController } from "./LogActivityController";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -91,6 +92,13 @@ export const updateUser = async (
 
     await userRepository.save(user);
 
+    // Log user activity
+    try {
+      await LogActivityController.logUserActivity(Number(id), `User profile updated`);
+    } catch (logError) {
+      console.error("Failed to log user activity:", logError);
+    }
+
     return res.status(200).json({
       message: "User updated successfully",
       user,
@@ -113,6 +121,13 @@ export const deleteUser = async (
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    // Log user activity before deletion
+    try {
+      await LogActivityController.logUserActivity(Number(id), `User account deleted`);
+    } catch (logError) {
+      console.error("Failed to log user activity:", logError);
     }
 
     await userRepository.remove(user);
@@ -156,6 +171,13 @@ export const changePassword = async (
     user.password = hashedPassword;
     await userRepository.save(user);
 
+    // Log user activity
+    try {
+      await LogActivityController.logUserActivity(Number(id), `Password changed`);
+    } catch (logError) {
+      console.error("Failed to log user activity:", logError);
+    }
+
     return res.status(200).json({ message: "Password changed successfully" });
   } catch (error) {
     console.error("Change password error:", error);
@@ -172,6 +194,14 @@ export const setWhatsAppConfig = async (req: Request, res: Response) => {
     user.whatsapp_api_token = whatsapp_api_token;
     user.whatsapp_business_phone = whatsapp_business_phone;
     await userRepository.save(user);
+
+    // Log user activity
+    try {
+      await LogActivityController.logUserActivity(userId, `WhatsApp configuration updated`);
+    } catch (logError) {
+      console.error("Failed to log user activity:", logError);
+    }
+
     return res.status(200).json({ message: "WhatsApp config updated", user });
   } catch (error) {
     return res.status(500).json({ message: "Internal server error" });
@@ -289,6 +319,17 @@ export const importContactsCSV = async (req: any, res: Response) => {
     }
 
     fs.unlinkSync(filePath);
+
+    // Log user activity (assuming admin user with ID from request)
+    try {
+      const authReq = req as any;
+      if (authReq.user?.id) {
+        await LogActivityController.logUserActivity(authReq.user.id, `Imported ${results.length} contacts from CSV`);
+      }
+    } catch (logError) {
+      console.error("Failed to log user activity:", logError);
+    }
+
     return res
       .status(200)
       .json({ message: "Contacts imported", data: results });
@@ -336,6 +377,17 @@ export const updateContact = async (req: Request, res: Response) => {
     if (opt_in !== undefined) user.opt_in = opt_in;
     if (last_contacted) user.last_contacted = new Date(last_contacted);
     await userRepository.save(user);
+
+    // Log user activity
+    try {
+      const authReq = req as any;
+      if (authReq.user?.id) {
+        await LogActivityController.logUserActivity(authReq.user.id, `Updated contact: ${user.first_name} ${user.last_name}`);
+      }
+    } catch (logError) {
+      console.error("Failed to log user activity:", logError);
+    }
+
     return res.status(200).json({ message: "Contact updated", user });
   } catch (error) {
     console.error("Update contact error:", error);
@@ -364,6 +416,17 @@ export const tagContact = async (req: Request, res: Response) => {
         await tagRepository.save(tag);
       }
     }
+
+    // Log user activity
+    try {
+      const authReq = req as any;
+      if (authReq.user?.id) {
+        await LogActivityController.logUserActivity(authReq.user.id, `Updated tags for contact ID: ${id}`);
+      }
+    } catch (logError) {
+      console.error("Failed to log user activity:", logError);
+    }
+
     return res.status(200).json({ message: "Tags updated" });
   } catch (error) {
     console.error("Tag contact error:", error);

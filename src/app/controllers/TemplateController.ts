@@ -6,6 +6,7 @@ import { TemplateMedia } from "../../database/entities/TemplateMedia";
 import { Category } from "../../database/entities/Category";
 import { User, UserRole } from "../../database/entities/User";
 import axios from "axios";
+import { LogActivityController } from "./LogActivityController";
 
 export const TemplateController = {
   getAllTemplates: async (req: Request, res: Response) => {
@@ -223,6 +224,16 @@ export const TemplateController = {
         }
       }
 
+      // Log user activity
+      try {
+        const authReq = req as any;
+        if (authReq.user?.id) {
+          await LogActivityController.logUserActivity(authReq.user.id, `Created template: ${savedTemplate?.name}`);
+        }
+      } catch (logError) {
+        console.error("Failed to log user activity:", logError);
+      }
+
       return res.status(201).json({
         message: "Template created successfully",
         template: savedTemplate,
@@ -289,6 +300,16 @@ export const TemplateController = {
         relations: ["category", "media", "variables"],
       });
 
+      // Log user activity
+      try {
+        const authReq = req as any;
+        if (authReq.user?.id) {
+          await LogActivityController.logUserActivity(authReq.user.id, `Updated template: ${updatedTemplate?.name}`);
+        }
+      } catch (logError) {
+        console.error("Failed to log user activity:", logError);
+      }
+
       return res.status(200).json({
         message: "Template updated successfully",
         template: updatedTemplate,
@@ -310,6 +331,16 @@ export const TemplateController = {
 
       if (!template) {
         return res.status(404).json({ message: "Template not found" });
+      }
+
+      // Log user activity before deletion
+      try {
+        const authReq = req as any;
+        if (authReq.user?.id) {
+          await LogActivityController.logUserActivity(authReq.user.id, `Deleted template: ${template.name}`);
+        }
+      } catch (logError) {
+        console.error("Failed to log user activity:", logError);
       }
 
       await templateRepository.remove(template);
