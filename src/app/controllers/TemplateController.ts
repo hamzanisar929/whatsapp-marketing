@@ -8,6 +8,10 @@ import { User, UserRole } from "../../database/entities/User";
 import axios from "axios";
 import { LogActivityController } from "./LogActivityController";
 
+const whatsapp_api_url = "https://graph.facebook.com/v19.0";
+const WHATSAPP_BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+const whatsapp_api_token = process.env.WHATSAPP_ACCESS_TOKEN;
+
 export const TemplateController = {
   getAllTemplates: async (req: Request, res: Response) => {
     try {
@@ -45,6 +49,370 @@ export const TemplateController = {
   },
 
   // Uncomment category_id
+  // createTemplate: async (req: Request, res: Response) => {
+  //   try {
+  //     const {
+  //       name,
+  //       language,
+  //       category_id,
+  //       message,
+  //       variables,
+  //       is_active,
+  //       register_to_whatsapp,
+  //     }: {
+  //       name: string;
+  //       language: string;
+  //       category_id: number;
+  //       message: string;
+  //       variables?: {
+  //         name: string;
+  //         default_value?: string;
+  //         is_required?: boolean;
+  //       }[];
+  //       is_active?: boolean;
+  //       register_to_whatsapp?: boolean;
+  //     } = req.body;
+
+  //     const categoryRepository = AppDataSource.getRepository(Category);
+  //     const category = await categoryRepository.findOne({
+  //       where: { id: category_id },
+  //     });
+
+  //     if (!category) {
+  //       return res.status(404).json({ message: "Category not found" });
+  //     }
+
+  //     const templateRepository = AppDataSource.getRepository(Template);
+  //     const template = templateRepository.create({
+  //       name,
+  //       language,
+  //       category_id,
+  //       message,
+  //       is_active: is_active || false,
+  //       is_drafted: true,
+  //       is_approved: false,
+  //       status: TemplateStatus.PENDING,
+  //     });
+
+  //     await templateRepository.save(template);
+
+  //     if (variables && variables.length > 0) {
+  //       const variableRepository = AppDataSource.getRepository(Variable);
+
+  //       for (const variable of variables) {
+  //         const newVariable = variableRepository.create({
+  //           template_id: template.id,
+  //           name: variable.name,
+  //           default_value: variable.default_value || undefined,
+  //           is_required: variable.is_required || false,
+  //         });
+
+  //         await variableRepository.save(newVariable);
+  //       }
+  //     }
+
+  //     const savedTemplate = await templateRepository.findOne({
+  //       where: { id: template.id },
+  //       relations: ["category", "variables"],
+  //     });
+
+  //     // Register template to WhatsApp Business API if requested
+  //     let waRegistrationResponse = null;
+  //     let waRegistrationError = null;
+
+  //     if (register_to_whatsapp) {
+  //       // Get admin user with WhatsApp API credentials
+  //       const userRepository = AppDataSource.getRepository(User);
+  //       const admin = await userRepository.findOne({
+  //         where: { role: UserRole.ADMIN },
+  //       });
+
+  //       if (
+  //         !admin ||
+  //         !admin.whatsapp_api_token ||
+  //         !admin.whatsapp_business_phone
+  //       ) {
+  //         return res.status(400).json({
+  //           message:
+  //             "Template created but not registered with WhatsApp: Admin WhatsApp API config missing",
+  //           template: savedTemplate,
+  //         });
+  //       }
+
+  //       // Prepare components based on variables
+  //       const components = [];
+  //       if (variables && variables.length > 0) {
+  //         const params = variables.map((v) => ({
+  //           type: "text",
+  //           text: "{{" + v.name + "}}",
+  //         }));
+
+  //         components.push({
+  //           type: "body",
+  //           text: message,
+  //           parameters: params,
+  //         });
+  //       } else {
+  //         components.push({
+  //           type: "body",
+  //           text: message,
+  //         });
+  //       }
+
+  //       try {
+  //         // First, get the WhatsApp Business Account ID
+  //         // const wbaResponse = await axios.get(
+  //         //   `https://graph.facebook.com/v17.0/${admin.whatsapp_business_phone}`,
+  //         //   {
+  //         //     headers: {
+  //         //       Authorization: `Bearer ${admin.whatsapp_api_token}`,
+  //         //       "Content-Type": "application/json",
+  //         //     },
+  //         //   }
+  //         // );
+
+  //         const whatsappBusinessAccountId = 181499641717304;
+
+  //         if (!whatsappBusinessAccountId) {
+  //           return res.status(400).json({
+  //             message:
+  //               "Template created but not registered with WhatsApp: Could not retrieve WhatsApp Business Account ID",
+  //             template: savedTemplate,
+  //             error: "Missing whatsapp_business_account_id in API response",
+  //           });
+  //         }
+
+  //         // Register template with WhatsApp Business API using the WhatsApp Business Account ID
+  //         waRegistrationResponse = await axios.post(
+  //           `https://graph.facebook.com/v17.0/${whatsappBusinessAccountId}/message_templates`,
+  //           {
+  //             name: name,
+  //             category: category.name, // Use standard WhatsApp category instead of custom category name
+  //             language: language,
+  //             components: [
+  //               {
+  //                 type: "BODY",
+  //                 text: message,
+  //                 // parameters:
+  //                 //   variables && variables.length > 0
+  //                 //     ? variables.map((v, index) => ({
+  //                 //         type: "text",
+  //                 //         text: "{{" + (index + 1) + "}}",
+  //                 //       }))
+  //                 //     : [],
+  //               },
+  //             ],
+  //           },
+  //           {
+  //             headers: {
+  //               Authorization: `Bearer ${admin.whatsapp_api_token}`,
+  //               "Content-Type": "application/json",
+  //             },
+  //           }
+  //         );
+
+  //         return res.status(201).json({
+  //           message:
+  //             "Template created and registered with WhatsApp successfully",
+  //           template: savedTemplate,
+  //           whatsapp_registration: waRegistrationResponse.data,
+  //         });
+  //       } catch (err: any) {
+  //         waRegistrationError = err.response?.data || err.message;
+
+  //         return res.status(201).json({
+  //           message: "Template created but failed to register with WhatsApp",
+  //           template: savedTemplate,
+  //           whatsapp_error: waRegistrationError,
+  //         });
+  //       }
+  //     }
+
+  //     // Log user activity
+  //     try {
+  //       const authReq = req as any;
+  //       if (authReq.user?.id) {
+  //         await LogActivityController.logUserActivity(authReq.user.id, `Created template: ${savedTemplate?.name}`);
+  //       }
+  //     } catch (logError) {
+  //       console.error("Failed to log user activity:", logError);
+  //     }
+
+  //     return res.status(201).json({
+  //       message: "Template created successfully",
+  //       template: savedTemplate,
+  //     });
+  //   } catch (error) {
+  //     console.error("Create template error:", error);
+  //     return res.status(500).json({ message: "Internal server error" });
+  //   }
+  // },
+
+  // New createTemplate
+  // createTemplate: async (req: Request, res: Response) => {
+  //   try {
+  //     const {
+  //       name,
+  //       language,
+  //       category_id,
+  //       message,
+  //       variables,
+  //       is_active,
+  //       register_to_whatsapp,
+  //     }: {
+  //       name: string;
+  //       language: string;
+  //       category_id: number;
+  //       message: string;
+  //       variables?: {
+  //         name: string;
+  //         default_value?: string;
+  //         is_required?: boolean;
+  //       }[];
+  //       is_active?: boolean;
+  //       register_to_whatsapp?: boolean;
+  //     } = req.body;
+
+  //     const categoryRepository = AppDataSource.getRepository(Category);
+  //     const category = await categoryRepository.findOne({
+  //       where: { id: category_id },
+  //     });
+
+  //     if (!category) {
+  //       return res.status(404).json({ message: "Category not found" });
+  //     }
+
+  //     const templateRepository = AppDataSource.getRepository(Template);
+  //     const template = templateRepository.create({
+  //       name,
+  //       language,
+  //       category_id,
+  //       message,
+  //       is_active: is_active || false,
+  //       is_drafted: true,
+  //       is_approved: false,
+  //       status: TemplateStatus.PENDING,
+  //     });
+
+  //     await templateRepository.save(template);
+
+  //     if (variables && variables.length > 0) {
+  //       const variableRepository = AppDataSource.getRepository(Variable);
+  //       for (const variable of variables) {
+  //         const newVariable = variableRepository.create({
+  //           template_id: template.id,
+  //           name: variable.name,
+  //           default_value: variable.default_value || undefined,
+  //           is_required: variable.is_required || false,
+  //         });
+
+  //         await variableRepository.save(newVariable);
+  //       }
+  //     }
+
+  //     const savedTemplate = await templateRepository.findOne({
+  //       where: { id: template.id },
+  //       relations: ["category", "variables"],
+  //     });
+
+  //     // Register template to WhatsApp Business API if requested
+  //     let waRegistrationResponse = null;
+  //     let waRegistrationError = null;
+
+  //     if (register_to_whatsapp) {
+  //       const userRepository = AppDataSource.getRepository(User);
+  //       const admin = await userRepository.findOne({
+  //         where: { role: UserRole.ADMIN },
+  //       });
+
+  //       if (
+  //         !admin ||
+  //         !admin.whatsapp_api_token ||
+  //         !admin.whatsapp_business_phone
+  //       ) {
+  //         return res.status(400).json({
+  //           message:
+  //             "Template created but not registered with WhatsApp: Admin WhatsApp API config missing",
+  //           template: savedTemplate,
+  //         });
+  //       }
+
+  //       const whatsappBusinessAccountId = 181499641717304; // hardcoded for now
+
+  //       if (!whatsappBusinessAccountId) {
+  //         return res.status(400).json({
+  //           message:
+  //             "Template created but not registered with WhatsApp: Could not retrieve WhatsApp Business Account ID",
+  //           template: savedTemplate,
+  //           error: "Missing whatsapp_business_account_id in API response",
+  //         });
+  //       }
+
+  //       // Prepare the correct WhatsApp template registration payload
+  //       const formattedMessage = message; // Should include numbered placeholders like {{1}}, {{2}}, etc.
+
+  //       try {
+  //         waRegistrationResponse = await axios.post(
+  //           `https://graph.facebook.com/v17.0/${whatsappBusinessAccountId}/message_templates`,
+  //           {
+  //             name: name,
+  //             category: category.name.toUpperCase(), // MARKETING, TRANSACTIONAL, etc.
+  //             language: language,
+  //             components: [
+  //               {
+  //                 type: "BODY",
+  //                 text: formattedMessage,
+  //               },
+  //             ],
+  //           },
+  //           {
+  //             headers: {
+  //               Authorization: `Bearer ${admin.whatsapp_api_token}`,
+  //               "Content-Type": "application/json",
+  //             },
+  //           }
+  //         );
+
+  //         return res.status(201).json({
+  //           message:
+  //             "Template created and registered with WhatsApp successfully",
+  //           template: savedTemplate,
+  //           whatsapp_registration: waRegistrationResponse.data,
+  //         });
+  //       } catch (err: any) {
+  //         waRegistrationError = err.response?.data || err.message;
+
+  //         return res.status(201).json({
+  //           message: "Template created but failed to register with WhatsApp",
+  //           template: savedTemplate,
+  //           whatsapp_error: waRegistrationError,
+  //         });
+  //       }
+  //     }
+
+  //     // Log user activity
+  //     try {
+  //       const authReq = req as any;
+  //       if (authReq.user?.id) {
+  //         await LogActivityController.logUserActivity(
+  //           authReq.user.id,
+  //           `Created template: ${savedTemplate?.name}`
+  //         );
+  //       }
+  //     } catch (logError) {
+  //       console.error("Failed to log user activity:", logError);
+  //     }
+
+  //     return res.status(201).json({
+  //       message: "Template created successfully",
+  //       template: savedTemplate,
+  //     });
+  //   } catch (error) {
+  //     console.error("Create template error:", error);
+  //     return res.status(500).json({ message: "Internal server error" });
+  //   }
+  // },
+
   createTemplate: async (req: Request, res: Response) => {
     try {
       const {
@@ -69,6 +437,13 @@ export const TemplateController = {
         register_to_whatsapp?: boolean;
       } = req.body;
 
+      if (!name || !language || !category_id || !message) {
+        return res.status(400).json({
+          message:
+            "Missing required fields: name, language, category_id, or message.",
+        });
+      }
+
       const categoryRepository = AppDataSource.getRepository(Category);
       const category = await categoryRepository.findOne({
         where: { id: category_id },
@@ -92,42 +467,20 @@ export const TemplateController = {
 
       await templateRepository.save(template);
 
-      if (variables && variables.length > 0) {
-        const variableRepository = AppDataSource.getRepository(Variable);
-
-        for (const variable of variables) {
-          const newVariable = variableRepository.create({
-            template_id: template.id,
-            name: variable.name,
-            default_value: variable.default_value || undefined,
-            is_required: variable.is_required || false,
-          });
-
-          await variableRepository.save(newVariable);
-        }
-      }
-
       const savedTemplate = await templateRepository.findOne({
         where: { id: template.id },
         relations: ["category", "variables"],
       });
 
-      // Register template to WhatsApp Business API if requested
       let waRegistrationResponse = null;
-      let waRegistrationError = null;
 
       if (register_to_whatsapp) {
-        // Get admin user with WhatsApp API credentials
         const userRepository = AppDataSource.getRepository(User);
         const admin = await userRepository.findOne({
           where: { role: UserRole.ADMIN },
         });
 
-        if (
-          !admin ||
-          !admin.whatsapp_api_token ||
-          !admin.whatsapp_business_phone
-        ) {
+        if (!admin?.whatsapp_api_token || !admin.whatsapp_business_phone) {
           return res.status(400).json({
             message:
               "Template created but not registered with WhatsApp: Admin WhatsApp API config missing",
@@ -135,69 +488,35 @@ export const TemplateController = {
           });
         }
 
-        // Prepare components based on variables
-        const components = [];
-        if (variables && variables.length > 0) {
-          const params = variables.map((v) => ({
-            type: "text",
-            text: "{{" + v.name + "}}",
-          }));
-
-          components.push({
-            type: "body",
-            text: message,
-            parameters: params,
-          });
-        } else {
-          components.push({
-            type: "body",
-            text: message,
-          });
+        const whatsappBusinessAccountId =
+          process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+        if (!whatsappBusinessAccountId) {
+          return res
+            .status(500)
+            .json({ message: "WhatsApp Business Account ID not configured." });
         }
 
-        try {
-          // First, get the WhatsApp Business Account ID
-          // const wbaResponse = await axios.get(
-          //   `https://graph.facebook.com/v17.0/${admin.whatsapp_business_phone}`,
-          //   {
-          //     headers: {
-          //       Authorization: `Bearer ${admin.whatsapp_api_token}`,
-          //       "Content-Type": "application/json",
-          //     },
-          //   }
-          // );
-
-          const whatsappBusinessAccountId = 181499641717304;
-
-          if (!whatsappBusinessAccountId) {
-            return res.status(400).json({
-              message:
-                "Template created but not registered with WhatsApp: Could not retrieve WhatsApp Business Account ID",
-              template: savedTemplate,
-              error: "Missing whatsapp_business_account_id in API response",
-            });
-          }
-
-          // Register template with WhatsApp Business API using the WhatsApp Business Account ID
-          waRegistrationResponse = await axios.post(
-            `https://graph.facebook.com/v17.0/${whatsappBusinessAccountId}/message_templates`,
-            {
-              name: name,
-              category: category.name, // Use standard WhatsApp category instead of custom category name
-              language: language,
-              components: [
-                {
-                  type: "BODY",
-                  text: message,
-                  // parameters:
-                  //   variables && variables.length > 0
-                  //     ? variables.map((v, index) => ({
-                  //         type: "text",
-                  //         text: "{{" + (index + 1) + "}}",
-                  //       }))
-                  //     : [],
-                },
+        const components: any[] = [
+          {
+            type: "BODY",
+            text: message,
+            example: {
+              body_text: [
+                variables?.map((v) => v.default_value || "Sample") || [],
               ],
+            },
+          },
+        ];
+
+        try {
+          const waRes = await axios.post(
+            `https://graph.facebook.com/v19.0/${whatsappBusinessAccountId}/message_templates`,
+            {
+              name,
+              category: category.name.toUpperCase(),
+              language,
+              parameter_format: "POSITIONAL",
+              components,
             },
             {
               headers: {
@@ -207,28 +526,29 @@ export const TemplateController = {
             }
           );
 
-          return res.status(201).json({
-            message:
-              "Template created and registered with WhatsApp successfully",
-            template: savedTemplate,
-            whatsapp_registration: waRegistrationResponse.data,
-          });
-        } catch (err: any) {
-          waRegistrationError = err.response?.data || err.message;
+          waRegistrationResponse = waRes.data;
 
+          return res.status(201).json({
+            message: "Template created and registered with WhatsApp",
+            template: savedTemplate,
+            whatsapp_registration: waRegistrationResponse,
+          });
+        } catch (error: any) {
           return res.status(201).json({
             message: "Template created but failed to register with WhatsApp",
             template: savedTemplate,
-            whatsapp_error: waRegistrationError,
+            whatsapp_error: error.response?.data || error.message,
           });
         }
       }
 
-      // Log user activity
       try {
         const authReq = req as any;
         if (authReq.user?.id) {
-          await LogActivityController.logUserActivity(authReq.user.id, `Created template: ${savedTemplate?.name}`);
+          await LogActivityController.logUserActivity(
+            authReq.user.id,
+            `Created template: ${savedTemplate?.name}`
+          );
         }
       } catch (logError) {
         console.error("Failed to log user activity:", logError);
@@ -304,7 +624,10 @@ export const TemplateController = {
       try {
         const authReq = req as any;
         if (authReq.user?.id) {
-          await LogActivityController.logUserActivity(authReq.user.id, `Updated template: ${updatedTemplate?.name}`);
+          await LogActivityController.logUserActivity(
+            authReq.user.id,
+            `Updated template: ${updatedTemplate?.name}`
+          );
         }
       } catch (logError) {
         console.error("Failed to log user activity:", logError);
@@ -337,7 +660,10 @@ export const TemplateController = {
       try {
         const authReq = req as any;
         if (authReq.user?.id) {
-          await LogActivityController.logUserActivity(authReq.user.id, `Deleted template: ${template.name}`);
+          await LogActivityController.logUserActivity(
+            authReq.user.id,
+            `Deleted template: ${template.name}`
+          );
         }
       } catch (logError) {
         console.error("Failed to log user activity:", logError);
@@ -384,75 +710,186 @@ export const TemplateController = {
     }
   },
 
+  // syncTemplatesFromWhatsApp: async (req: Request, res: Response) => {
+  //   try {
+  //     // Get admin user (assume req.user.id is admin)
+  //     const userId = (req as any).user?.id;
+  //     console.log("userId in controller:", userId);
+  //     if (!userId) {
+  //       return res
+  //         .status(401)
+  //         .json({ message: "Unauthorized: user not found in request" });
+  //     }
+  //     const userRepository = AppDataSource.getRepository(User);
+  //     const admin = await userRepository.findOne({ where: { id: userId } });
+  //     if (
+  //       !admin ||
+  //       !admin.whatsapp_api_token ||
+  //       !admin.whatsapp_business_phone
+  //     ) {
+  //       return res
+  //         .status(400)
+  //         .json({ message: "Admin WhatsApp API config missing" });
+  //     }
+  //     // Fetch templates from WhatsApp Business API
+  //     let waResponse = null;
+  //     try {
+  //       // First, get the WhatsApp Business Account ID
+  //       const wbaResponse = await axios.get(
+  //         `https://graph.facebook.com/v17.0/${admin.whatsapp_business_phone}`,
+  //         {
+  //           headers: {
+  //             Authorization: `Bearer ${admin.whatsapp_api_token}`,
+  //             "Content-Type": "application/json",
+  //           },
+  //         }
+  //       );
+
+  //       const whatsappBusinessAccountId =
+  //         wbaResponse.data?.whatsapp_business_account_id;
+
+  //       if (!whatsappBusinessAccountId) {
+  //         return res.status(400).json({
+  //           message: "Could not retrieve WhatsApp Business Account ID",
+  //           error: "Missing whatsapp_business_account_id in API response",
+  //         });
+  //       }
+
+  //       // Now fetch templates using the WhatsApp Business Account ID
+  //       waResponse = await axios.get(
+  //         `https://graph.facebook.com/v17.0/${whatsappBusinessAccountId}/message_templates`,
+  //         {
+  //           headers: {
+  //             Authorization: `Bearer ${admin.whatsapp_api_token}`,
+  //             "Content-Type": "application/json",
+  //           },
+  //         }
+  //       );
+  //     } catch (err: any) {
+  //       return res.status(500).json({
+  //         message: "Failed to fetch templates from WhatsApp API",
+  //         error: err.response?.data || err.message,
+  //       });
+  //     }
+  //     // Return WhatsApp templates
+  //     return res.status(200).json({
+  //       message: "Templates synced successfully",
+  //       templates: waResponse.data?.data || [],
+  //     });
+  //   } catch (error) {
+  //     console.error("Sync templates error:", error);
+  //     return res.status(500).json({ message: "Internal server error" });
+  //   }
+  // },
+
+  // New sync template from whatsapp
+
   syncTemplatesFromWhatsApp: async (req: Request, res: Response) => {
     try {
-      // Get admin user (assume req.user.id is admin)
+      console.log("Syncing...");
       const userId = (req as any).user?.id;
-      console.log("userId in controller:", userId);
+      console.log("User ID from request:", userId);
+
       if (!userId) {
         return res
           .status(401)
           .json({ message: "Unauthorized: user not found in request" });
       }
+
       const userRepository = AppDataSource.getRepository(User);
+      console.log("Fetching user from database...");
       const admin = await userRepository.findOne({ where: { id: userId } });
-      if (
-        !admin ||
-        !admin.whatsapp_api_token ||
-        !admin.whatsapp_business_phone
-      ) {
+
+      if (!admin) {
+        return res.status(404).json({ message: "Admin user not found" });
+      }
+
+      const { whatsapp_api_token, whatsapp_business_phone } = admin;
+
+      if (!whatsapp_api_token || !whatsapp_business_phone) {
+        console.log("Missing WhatsApp config:", {
+          whatsapp_api_token,
+          whatsapp_business_phone,
+        });
         return res
           .status(400)
           .json({ message: "Admin WhatsApp API config missing" });
       }
-      // Fetch templates from WhatsApp Business API
-      let waResponse = null;
+
+      let whatsappBusinessAccountId: string;
+
       try {
-        // First, get the WhatsApp Business Account ID
+        console.log(
+          "Fetching WABA ID from phone number ID:",
+          whatsapp_business_phone
+        );
         const wbaResponse = await axios.get(
-          `https://graph.facebook.com/v17.0/${admin.whatsapp_business_phone}`,
+          `https://graph.facebook.com/v17.0/${whatsapp_business_phone}?fields=whatsapp_business_account`,
           {
             headers: {
-              Authorization: `Bearer ${admin.whatsapp_api_token}`,
+              Authorization: `Bearer ${whatsapp_api_token}`,
               "Content-Type": "application/json",
             },
           }
         );
 
-        const whatsappBusinessAccountId =
-          wbaResponse.data?.whatsapp_business_account_id;
+        whatsappBusinessAccountId =
+          wbaResponse.data?.whatsapp_business_account?.id;
 
         if (!whatsappBusinessAccountId) {
           return res.status(400).json({
             message: "Could not retrieve WhatsApp Business Account ID",
-            error: "Missing whatsapp_business_account_id in API response",
+            error: "Missing whatsapp_business_account.id in API response",
           });
         }
+        console.log("Retrieved WABA ID:", whatsappBusinessAccountId);
+      } catch (err: any) {
+        console.error(
+          "Error fetching WABA ID:",
+          err.response?.data || err.message
+        );
+        return res.status(500).json({
+          message: "Failed to fetch WhatsApp Business Account ID",
+          error: err.response?.data || err.message,
+        });
+      }
 
-        // Now fetch templates using the WhatsApp Business Account ID
+      // Fetch templates
+      let waResponse;
+      try {
+        console.log("Fetching message templates...");
         waResponse = await axios.get(
           `https://graph.facebook.com/v17.0/${whatsappBusinessAccountId}/message_templates`,
           {
             headers: {
-              Authorization: `Bearer ${admin.whatsapp_api_token}`,
+              Authorization: `Bearer ${whatsapp_api_token}`,
               "Content-Type": "application/json",
             },
           }
         );
+
+        console.log("Templates fetched:", waResponse.data?.data?.length || 0);
       } catch (err: any) {
+        console.error(
+          "Error fetching templates:",
+          err.response?.data || err.message
+        );
         return res.status(500).json({
           message: "Failed to fetch templates from WhatsApp API",
           error: err.response?.data || err.message,
         });
       }
-      // Return WhatsApp templates
+
       return res.status(200).json({
         message: "Templates synced successfully",
         templates: waResponse.data?.data || [],
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sync templates error:", error);
-      return res.status(500).json({ message: "Internal server error" });
+      return res.status(500).json({
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : error,
+      });
     }
   },
 };

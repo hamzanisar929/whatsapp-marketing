@@ -79,7 +79,7 @@ router.post(
 router.get(
   "/templates/sync",
   authenticate,
-  isAdmin,
+  // isAdmin,
   TemplateController.TemplateController.syncTemplatesFromWhatsApp
 );
 
