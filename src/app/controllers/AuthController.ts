@@ -117,13 +117,6 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
       { expiresIn: "24h" }
     );
 
-    // Log user activity
-    try {
-      await LogActivityController.logUserActivity(user.id, `User logged in: ${user.email}`);
-    } catch (logError) {
-      console.error("Failed to log user activity:", logError);
-    }
-
     return res.status(200).json({
       message: "Login successful",
       token,

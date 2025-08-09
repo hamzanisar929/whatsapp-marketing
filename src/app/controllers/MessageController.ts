@@ -4,7 +4,7 @@ import { Message } from "../../database/entities/Message";
 import { Template } from "../../database/entities/Template";
 import { User, UserRole } from "../../database/entities/User";
 import { Chat } from "../../database/entities/Chat";
-import { LessThanOrEqual } from "typeorm";
+import { Code, LessThanOrEqual } from "typeorm";
 import axios from "axios";
 import { parse } from "csv-parse";
 import fs from "fs";
@@ -80,20 +80,22 @@ async function processIncomingMessage(messageData: any) {
       // If contact doesn't exist, create a new one
       if (!contact) {
         console.log("➕ Step 2b: Contact not found - Creating new contact");
-        
+
         // Extract name from contacts array if available
         let firstName = "";
         let lastName = "";
-        
+
         if (contacts && contacts.length > 0) {
           // Try to find contact by wa_id matching the from number (without +)
-          let contactInfo = contacts.find((c: any) => c.wa_id === from.replace("+", ""));
-          
+          let contactInfo = contacts.find(
+            (c: any) => c.wa_id === from.replace("+", "")
+          );
+
           // If not found, just use the first contact in the array (WhatsApp usually sends the sender's info)
           if (!contactInfo && contacts[0]) {
             contactInfo = contacts[0];
           }
-          
+
           if (contactInfo && contactInfo.profile && contactInfo.profile.name) {
             const fullName = contactInfo.profile.name.trim();
             const nameParts = fullName.split(" ");
@@ -102,7 +104,7 @@ async function processIncomingMessage(messageData: any) {
             console.log(`📝 Extracted name: ${firstName} ${lastName}`);
           }
         }
-        
+
         contact = userRepository.create({
           phone: from,
           email: `${from}@whatsapp.temp`, // Temporary email
@@ -236,11 +238,11 @@ async function processIncomingMessage(messageData: any) {
             id: contact.id,
             first_name: contact.first_name,
             last_name: contact.last_name,
-            phone: contact.phone
+            phone: contact.phone,
           },
           chat_id: chat.id,
-          status: 'received',
-          created_at: incomingMessage.created_at
+          status: "received",
+          created_at: incomingMessage.created_at,
         });
 
         // Emit WhatsApp notification to business agents
@@ -254,10 +256,10 @@ async function processIncomingMessage(messageData: any) {
             id: contact.id,
             first_name: contact.first_name,
             last_name: contact.last_name,
-            phone: contact.phone
+            phone: contact.phone,
           },
           wa_message_id,
-          timestamp: new Date()
+          timestamp: new Date(),
         });
 
         console.log(`🔌 Real-time events emitted for chat ${chat.id}`);
@@ -457,6 +459,7 @@ async function sendBulkJob(job: any) {
   } = job;
 
   try {
+    console.log(receiver);
     const userRepository = AppDataSource.getRepository(User);
     const sender = await userRepository.findOne({ where: { id: sender_id } });
     console.log(job);
@@ -716,7 +719,10 @@ export const MessageController = {
 
       // Log user activity
       try {
-        await LogActivityController.logUserActivity(sender_id, `Sent message to ${receiver.first_name} ${receiver.last_name}`);
+        await LogActivityController.logUserActivity(
+          sender_id,
+          `Sent message to ${receiver.first_name} ${receiver.last_name}`
+        );
       } catch (logError) {
         console.error("Failed to log user activity:", logError);
       }
@@ -762,6 +768,7 @@ export const MessageController = {
         where: { id: template_id },
         relations: ["variables"],
       });
+
       if (!template) {
         return res.status(404).json({ message: "Template not found" });
       }
@@ -854,7 +861,10 @@ export const MessageController = {
 
       // Log user activity
       try {
-        await LogActivityController.logUserActivity(sender_id, `Sent template message '${template.name}' to ${receiver.first_name} ${receiver.last_name}`);
+        await LogActivityController.logUserActivity(
+          sender_id,
+          `Sent template message '${template.name}' to ${receiver.first_name} ${receiver.last_name}`
+        );
       } catch (logError) {
         console.error("Failed to log user activity:", logError);
       }
@@ -953,7 +963,10 @@ export const MessageController = {
 
       // Log user activity
       try {
-        await LogActivityController.logUserActivity(sender_id, `Initiated bulk message to ${users.length} recipients`);
+        await LogActivityController.logUserActivity(
+          sender_id,
+          `Initiated bulk message to ${users.length} recipients`
+        );
       } catch (logError) {
         console.error("Failed to log user activity:", logError);
       }
@@ -1114,6 +1127,69 @@ export const MessageController = {
   //     return res.status(500).json({ message: "Internal server error" });
   //   }
   // },
+
+  sendTemplateMessageTest: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { WHATSAPP_ACCESS_TOKEN } = process.env;
+
+      const response = await axios.post(
+        `https://graph.facebook.com/v20.0/140540532486833/messages`,
+        {
+          messaging_product: "whatsapp",
+          to: "923309266288", // must be in full international format without +
+          type: "template",
+          template: {
+            name: "hello_world",
+            language: { code: "en_US" },
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      console.log("✅ Message sent:", response.data);
+      return res.status(200).json(response.data);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error(
+          "❌ WhatsApp API error:",
+          error.response?.data || error.message
+        );
+        return res
+          .status(500)
+          .json(error.response?.data || { error: error.message });
+      } else {
+        console.error("❌ Unexpected error:", error);
+        return res.status(500).json({ error: "Internal server error" });
+      }
+    }
+    // console.log(process.env.WHATSAPP_ACCESS_TOKEN);
+    // const response = await axios({
+    //   url: `https://graph.facebook.com/v20.0/140540532486833/messages`,
+    //   method: "post",
+    //   headers: {
+    //     Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+    //     "Content-Type": "application/json",
+    //   },
+    //   data: JSON.stringify({
+    //     messaging_product: "whatsapp",
+    //     to: "923309266288",
+    //     type: "template",
+    //     template: {
+    //       name: "hello_world",
+    //       language: {
+    //         code: "en_US",
+    //       },
+    //     },
+    //   }),
+    // });
+
+    // console.log(response);
+  },
 
   scheduleMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {

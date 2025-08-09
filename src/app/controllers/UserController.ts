@@ -416,17 +416,6 @@ export const tagContact = async (req: Request, res: Response) => {
         await tagRepository.save(tag);
       }
     }
-
-    // Log user activity
-    try {
-      const authReq = req as any;
-      if (authReq.user?.id) {
-        await LogActivityController.logUserActivity(authReq.user.id, `Updated tags for contact ID: ${id}`);
-      }
-    } catch (logError) {
-      console.error("Failed to log user activity:", logError);
-    }
-
     return res.status(200).json({ message: "Tags updated" });
   } catch (error) {
     console.error("Tag contact error:", error);

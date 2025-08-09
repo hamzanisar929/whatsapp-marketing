@@ -115,16 +115,6 @@ export const CategoryController = {
         return res.status(404).json({ message: "Category not found" });
       }
 
-      // Log user activity before deletion
-      try {
-        const authReq = req as any;
-        if (authReq.user?.id) {
-          await LogActivityController.logUserActivity(authReq.user.id, `Deleted category: ${category.name}`);
-        }
-      } catch (logError) {
-        console.error("Failed to log user activity:", logError);
-      }
-
       await categoryRepository.remove(category);
 
       return res.status(200).json({ message: "Category deleted successfully" });

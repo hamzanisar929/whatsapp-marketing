@@ -76,16 +76,6 @@ export const TagController = {
         return res.status(404).json({ message: "Tag not found" });
       }
 
-      // Log user activity before deletion
-      try {
-        const authReq = req as any;
-        if (authReq.user?.id) {
-          await LogActivityController.logUserActivity(authReq.user.id, `Deleted tag: ${tag.name} from ${tag.taggable_type}`);
-        }
-      } catch (logError) {
-        console.error("Failed to log user activity:", logError);
-      }
-
       await tagRepository.remove(tag);
 
       return res.status(200).json({ message: "Tag deleted successfully" });

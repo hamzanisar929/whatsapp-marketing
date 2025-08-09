@@ -710,6 +710,157 @@ export const TemplateController = {
     }
   },
 
+  getAllWhatsAppTemplates: async (req: Request, res: Response) => {
+    try {
+      const WABA_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID; // Your WhatsApp Business Account ID
+      const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+
+      if (!WABA_ID || !ACCESS_TOKEN) {
+        return res.status(500).json({
+          success: false,
+          message:
+            "WABA_ID or WHATSAPP_ACCESS_TOKEN is not set in environment variables",
+        });
+      }
+
+      const response = await axios.get(
+        `https://graph.facebook.com/v20.0/${WABA_ID}/message_templates`,
+        {
+          headers: {
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const templatesFromAPI = response.data.data;
+      const templateRepo = AppDataSource.getRepository(Template);
+      const categoryRepo = AppDataSource.getRepository(Category);
+      const variableRepo = AppDataSource.getRepository(Variable);
+
+      for (const tpl of templatesFromAPI) {
+        // Ensure category exists
+        let category = await categoryRepo.findOne({
+          where: { name: tpl.category },
+        });
+        if (!category) {
+          category = categoryRepo.create({
+            name: tpl.category,
+          });
+          await categoryRepo.save(category);
+        }
+
+        // Extract BODY text
+        const bodyComponent = tpl.components.find(
+          (c: any) => c.type === "BODY"
+        );
+        const messageText = bodyComponent?.text || "";
+
+        // Map status
+        let mappedStatus: TemplateStatus = TemplateStatus.PENDING;
+        if (tpl.status === "APPROVED") mappedStatus = TemplateStatus.APPROVED;
+        else if (tpl.status === "REJECTED")
+          mappedStatus = TemplateStatus.REJECTED;
+
+        // Check if template exists
+        let templateEntity = await templateRepo.findOne({
+          where: { name: tpl.name, language: tpl.language },
+        });
+
+        if (templateEntity) {
+          // Update template
+          templateEntity.language = tpl.language;
+          templateEntity.category_id = category.id;
+          templateEntity.message = messageText;
+          templateEntity.is_active = tpl.status === "APPROVED";
+          templateEntity.is_approved = tpl.status === "APPROVED";
+          templateEntity.status = mappedStatus;
+          await templateRepo.save(templateEntity);
+        } else {
+          // Create new template
+          templateEntity = templateRepo.create({
+            name: tpl.name,
+            language: tpl.language,
+            category_id: category.id,
+            message: messageText,
+            is_active: tpl.status === "APPROVED",
+            is_approved: tpl.status === "APPROVED",
+            is_drafted: false,
+            status: mappedStatus,
+          });
+          await templateRepo.save(templateEntity);
+        }
+
+        // 2️⃣ Extract variables from template components
+        const variablesFound: {
+          name: string;
+          default_value?: string;
+          is_required: boolean;
+        }[] = [];
+
+        tpl.components.forEach((comp: any) => {
+          if (comp.text) {
+            // Match {{number}} placeholders
+            const matches = comp.text.match(/{{\d+}}/g);
+            if (Array.isArray(matches)) {
+              matches.forEach((match) => {
+                variablesFound.push({
+                  name: match, // store placeholder name (e.g., {{1}})
+                  default_value: undefined, // can be set if provided by API
+                  is_required: true, // placeholders are usually required
+                });
+              });
+            }
+          }
+        });
+
+        // 3️⃣ Sync variables with DB
+        if (variablesFound.length > 0) {
+          for (const variable of variablesFound) {
+            let existingVariable = await variableRepo.findOne({
+              where: {
+                template_id: templateEntity.id,
+                name: variable.name,
+              },
+            });
+
+            if (existingVariable) {
+              // Update variable
+              existingVariable.default_value =
+                variable.default_value ?? undefined;
+              existingVariable.is_required = variable.is_required;
+              await variableRepo.save(existingVariable);
+            } else {
+              // Create new variable
+              const newVariable = variableRepo.create({
+                template_id: templateEntity.id,
+                name: variable.name,
+                default_value: variable.default_value ?? undefined,
+                is_required: variable.is_required,
+              });
+              await variableRepo.save(newVariable);
+            }
+          }
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        data: response.data,
+      });
+    } catch (error: any) {
+      console.error(
+        "Error fetching WhatsApp templates:",
+        error.response?.data || error.message
+      );
+      res.status(500).json({
+        success: false,
+        message: "Failed to fetch WhatsApp templates",
+        error: error.response?.data || error.message,
+      });
+    }
+  },
+
   // syncTemplatesFromWhatsApp: async (req: Request, res: Response) => {
   //   try {
   //     // Get admin user (assume req.user.id is admin)

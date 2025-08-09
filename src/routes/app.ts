@@ -48,6 +48,21 @@ router.get(
   authenticate,
   TemplateController.TemplateController.getAllTemplates
 );
+
+router.get(
+  "/templates/whatsapp",
+  authenticate,
+  authorize([UserRole.ADMIN, UserRole.USER]),
+  TemplateController.TemplateController.getAllWhatsAppTemplates
+);
+
+// router.get(
+//   "/templates/sync",
+//   authenticate,
+//   // isAdmin,
+//   TemplateController.TemplateController.syncTemplatesFromWhatsApp
+// );
+
 router.get(
   "/templates/:id",
   authenticate,
@@ -59,6 +74,7 @@ router.post(
   authorize([UserRole.ADMIN, UserRole.USER]),
   TemplateController.TemplateController.createTemplate
 );
+
 router.put(
   "/templates/:id",
   authenticate,
@@ -76,12 +92,6 @@ router.post(
   authenticate,
   TemplateController.TemplateController.addTemplateMedia
 );
-router.get(
-  "/templates/sync",
-  authenticate,
-  // isAdmin,
-  TemplateController.TemplateController.syncTemplatesFromWhatsApp
-);
 
 // Message routes
 router.post(
@@ -94,6 +104,13 @@ router.post(
   authenticate,
   MessageController.MessageController.sendTemplateMessage
 );
+
+router.post(
+  "/messages/send-template-test",
+  authenticate,
+  MessageController.MessageController.sendTemplateMessageTest
+);
+
 router.post(
   "/messages/send-bulk",
   authenticate,
