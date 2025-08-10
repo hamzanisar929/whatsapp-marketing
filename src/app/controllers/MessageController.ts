@@ -775,7 +775,23 @@ export const MessageController = {
 
       // Prepare WhatsApp API template message payload
       const components = [];
-      if (template.variables && variables) {
+      // if (template.variables && variables) {
+      //   const params = template.variables.map((v: any) => ({
+      //     type: "text",
+      //     text: variables[v.name] || v.default_value || "",
+      //   }));
+      //   components.push({
+      //     type: "body",
+      //     parameters: params,
+      //   });
+      // }
+
+      if (variables && Array.isArray(variables)) {
+        components.push({
+          type: "body",
+          parameters: variables,
+        });
+      } else if (template.variables && variables) {
         const params = template.variables.map((v: any) => ({
           type: "text",
           text: variables[v.name] || v.default_value || "",

@@ -445,6 +445,18 @@ export const TemplateController = {
       }
 
       const categoryRepository = AppDataSource.getRepository(Category);
+      const templateRepository = AppDataSource.getRepository(Template);
+      const variableRepository = AppDataSource.getRepository(Variable);
+
+      const existingTemplate = await templateRepository.findOne({
+        where: { name },
+      });
+      if (existingTemplate) {
+        return res.status(400).json({
+          message: "Another template with the same name already exists.",
+        });
+      }
+
       const category = await categoryRepository.findOne({
         where: { id: category_id },
       });
@@ -453,7 +465,6 @@ export const TemplateController = {
         return res.status(404).json({ message: "Category not found" });
       }
 
-      const templateRepository = AppDataSource.getRepository(Template);
       const template = templateRepository.create({
         name,
         language,
@@ -467,7 +478,19 @@ export const TemplateController = {
 
       await templateRepository.save(template);
 
-      const savedTemplate = await templateRepository.findOne({
+      if (variables && variables.length > 0) {
+        const variableEntities = variables.map((v) =>
+          variableRepository.create({
+            template_id: template.id,
+            name: v.name,
+            default_value: v.default_value || undefined,
+            is_required: v.is_required ?? false,
+          })
+        );
+        await variableRepository.save(variableEntities);
+      }
+
+      let savedTemplate = await templateRepository.findOne({
         where: { id: template.id },
         relations: ["category", "variables"],
       });
@@ -648,27 +671,70 @@ export const TemplateController = {
       const { id } = req.params;
 
       const templateRepository = AppDataSource.getRepository(Template);
+      const variableRepository = AppDataSource.getRepository(Variable);
+
+      // Get template with variables
       const template = await templateRepository.findOne({
         where: { id: Number(id) },
+        relations: ["variables"],
       });
 
       if (!template) {
         return res.status(404).json({ message: "Template not found" });
       }
 
+      // Get sender's WhatsApp API credentials (assuming it's in authReq.user)
+      const authReq = req as any;
+      const senderId = authReq.user?.id;
+      if (!senderId) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
+      const userRepository = AppDataSource.getRepository(User);
+      const sender = await userRepository.findOne({ where: { id: senderId } });
+
+      if (!sender?.whatsapp_api_token || !sender?.whatsapp_business_phone) {
+        return res
+          .status(400)
+          .json({ message: "Sender WhatsApp API config missing" });
+      }
+
+      // Try to delete from WhatsApp Business API first
+      try {
+        await axios.delete(
+          `https://graph.facebook.com/v17.0/${process.env.WHATSAPP_BUSINESS_ACCOUNT_ID}/message_templates?name=${template.name}`,
+          {
+            headers: {
+              Authorization: `Bearer ${sender.whatsapp_api_token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      } catch (waError: any) {
+        console.error(
+          "Failed to delete template from WhatsApp API:",
+          waError.response?.data || waError.message
+        );
+        return res.status(500).json({
+          message: "Failed to delete template from WhatsApp Business API",
+          error: waError.response?.data || waError.message,
+        });
+      }
+
       // Log user activity before deletion
       try {
-        const authReq = req as any;
-        if (authReq.user?.id) {
-          await LogActivityController.logUserActivity(
-            authReq.user.id,
-            `Deleted template: ${template.name}`
-          );
-        }
+        await LogActivityController.logUserActivity(
+          senderId,
+          `Deleted template: ${template.name}`
+        );
       } catch (logError) {
         console.error("Failed to log user activity:", logError);
       }
 
+      // Delete variables first, then template
+      if (template.variables && template.variables.length > 0) {
+        await variableRepository.remove(template.variables);
+      }
       await templateRepository.remove(template);
 
       return res.status(200).json({ message: "Template deleted successfully" });
