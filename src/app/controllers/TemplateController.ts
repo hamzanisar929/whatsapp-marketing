@@ -7,6 +7,10 @@ import { Category } from "../../database/entities/Category";
 import { User, UserRole } from "../../database/entities/User";
 import axios from "axios";
 import { LogActivityController } from "./LogActivityController";
+import fs from "fs";
+import path from "path";
+import FormData from "form-data";
+import sharp from "sharp";
 
 const whatsapp_api_url = "https://graph.facebook.com/v19.0";
 const WHATSAPP_BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
@@ -413,6 +417,7 @@ export const TemplateController = {
   //   }
   // },
 
+  // Working create template controller
   createTemplate: async (req: Request, res: Response) => {
     try {
       const {
@@ -586,6 +591,467 @@ export const TemplateController = {
       return res.status(500).json({ message: "Internal server error" });
     }
   },
+
+  // Media Template Controller
+
+  // createTemplate: async (req: Request, res: Response) => {
+  //   try {
+  //     // ✅ Safe destructuring with defaults to avoid .map issues
+  //     const {
+  //       name,
+  //       language,
+  //       category_id,
+  //       message,
+  //       variables = [],
+  //       is_active = false,
+  //       register_to_whatsapp = false,
+  //       media = [],
+  //     }: {
+  //       name: string;
+  //       language: string;
+  //       category_id: number;
+  //       message: string;
+  //       variables?: {
+  //         name: string;
+  //         default_value?: string;
+  //         is_required?: boolean;
+  //       }[];
+  //       is_active?: boolean;
+  //       register_to_whatsapp?: boolean;
+  //       media?: {
+  //         filename: string;
+  //         filepath: string;
+  //         type: "image" | "video" | "document";
+  //       }[];
+  //     } = req.body;
+
+  //     // ✅ Required fields check
+  //     if (!name || !language || !category_id || !message) {
+  //       return res.status(400).json({
+  //         message:
+  //           "Missing required fields: name, language, category_id, or message.",
+  //       });
+  //     }
+
+  //     const categoryRepository = AppDataSource.getRepository(Category);
+  //     const templateRepository = AppDataSource.getRepository(Template);
+  //     const variableRepository = AppDataSource.getRepository(Variable);
+  //     const mediaRepository = AppDataSource.getRepository(TemplateMedia);
+
+  //     // ✅ Check duplicate name
+  //     const existingTemplate = await templateRepository.findOne({
+  //       where: { name },
+  //     });
+  //     if (existingTemplate) {
+  //       return res.status(400).json({
+  //         message: "Another template with the same name already exists.",
+  //       });
+  //     }
+
+  //     // ✅ Ensure category exists
+  //     const category = await categoryRepository.findOne({
+  //       where: { id: category_id },
+  //     });
+  //     if (!category) {
+  //       return res.status(404).json({ message: "Category not found" });
+  //     }
+
+  //     // ✅ Create and save template
+  //     const template = templateRepository.create({
+  //       name,
+  //       language,
+  //       category_id,
+  //       message,
+  //       is_active,
+  //       is_drafted: true,
+  //       is_approved: false,
+  //       status: TemplateStatus.PENDING,
+  //     });
+  //     await templateRepository.save(template);
+
+  //     // ✅ Save variables if any
+  //     if (variables.length) {
+  //       const variableEntities = variables.map((v) =>
+  //         variableRepository.create({
+  //           template_id: template.id,
+  //           name: v.name,
+  //           default_value: v.default_value || undefined,
+  //           is_required: v.is_required ?? false,
+  //         })
+  //       );
+  //       await variableRepository.save(variableEntities);
+  //     }
+
+  //     let savedTemplate = await templateRepository.findOne({
+  //       where: { id: template.id },
+  //       relations: ["category", "variables"],
+  //     });
+
+  //     let waRegistrationResponse = null;
+
+  //     // ✅ Register with WhatsApp if requested
+  //     if (register_to_whatsapp) {
+  //       const userRepository = AppDataSource.getRepository(User);
+  //       const admin = await userRepository.findOne({
+  //         where: { role: UserRole.ADMIN },
+  //       });
+
+  //       if (!admin?.whatsapp_api_token || !admin.whatsapp_business_phone) {
+  //         return res.status(400).json({
+  //           message:
+  //             "Template created but not registered with WhatsApp: Admin WhatsApp API config missing",
+  //           template: savedTemplate,
+  //         });
+  //       }
+
+  //       const whatsappBusinessAccountId =
+  //         process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+  //       if (!whatsappBusinessAccountId) {
+  //         return res.status(500).json({
+  //           message: "WhatsApp Business Account ID not configured.",
+  //         });
+  //       }
+
+  //       let components: any[] = [];
+
+  //       // ✅ Handle media uploads
+  //       for (const m of media) {
+  //         const filePath = path.resolve(m.filepath);
+
+  //         // Compress image > 2MB
+  //         if (m.type.toLowerCase() === "image") {
+  //           const stats = fs.statSync(filePath);
+  //           if (stats.size > 2 * 1024 * 1024) {
+  //             const compressedPath = filePath.replace(
+  //               /(\.[\w]+)$/,
+  //               "_compressed$1"
+  //             );
+  //             await sharp(filePath)
+  //               .resize({ width: 1200, withoutEnlargement: true })
+  //               .jpeg({ quality: 80 })
+  //               .toFile(compressedPath);
+  //             console.log(`Compressed image saved to: ${compressedPath}`);
+  //             m.filepath = compressedPath;
+  //           }
+  //         }
+
+  //         // Upload to WhatsApp media endpoint
+  //         const form = new FormData();
+  //         form.append("messaging_product", "whatsapp");
+  //         form.append("file", fs.createReadStream(m.filepath));
+
+  //         const mediaUploadRes = await axios.post(
+  //           `https://graph.facebook.com/v19.0/${whatsappBusinessAccountId}/media`,
+  //           form,
+  //           {
+  //             headers: {
+  //               Authorization: `Bearer ${admin.whatsapp_api_token}`,
+  //               ...form.getHeaders(),
+  //             },
+  //           }
+  //         );
+
+  //         const mediaId = mediaUploadRes.data.id;
+
+  //         // Save in DB
+  //         const newMedia = mediaRepository.create({
+  //           template_id: template.id,
+  //           filename: m.filename,
+  //           type: m.type.toUpperCase(),
+  //           url: m.filepath,
+  //           wa_media_id: mediaId,
+  //         });
+  //         await mediaRepository.save(newMedia);
+
+  //         // Add to HEADER component
+  //         components.push({
+  //           type: "HEADER",
+  //           format: m.type.toUpperCase(),
+  //           example: { header_handle: [mediaId] },
+  //         });
+  //       }
+
+  //       // ✅ Add BODY component with variables
+  //       components.push({
+  //         type: "BODY",
+  //         text: message,
+  //         example: {
+  //           body_text: [variables.map((v) => v.default_value || "Sample")],
+  //         },
+  //       });
+
+  //       // ✅ Register template with WhatsApp
+  //       try {
+  //         const waRes = await axios.post(
+  //           `https://graph.facebook.com/v19.0/${whatsappBusinessAccountId}/message_templates`,
+  //           {
+  //             name,
+  //             category: category.name.toUpperCase(),
+  //             language,
+  //             parameter_format: "POSITIONAL",
+  //             components,
+  //           },
+  //           {
+  //             headers: {
+  //               Authorization: `Bearer ${admin.whatsapp_api_token}`,
+  //               "Content-Type": "application/json",
+  //             },
+  //           }
+  //         );
+
+  //         waRegistrationResponse = waRes.data;
+
+  //         return res.status(201).json({
+  //           message: "Template created and registered with WhatsApp",
+  //           template: savedTemplate,
+  //           whatsapp_registration: waRegistrationResponse,
+  //         });
+  //       } catch (error: any) {
+  //         return res.status(201).json({
+  //           message: "Template created but failed to register with WhatsApp",
+  //           template: savedTemplate,
+  //           whatsapp_error: error.response?.data || error.message,
+  //         });
+  //       }
+  //     }
+
+  //     // ✅ Log activity
+  //     try {
+  //       const authReq = req as any;
+  //       if (authReq.user?.id) {
+  //         await LogActivityController.logUserActivity(
+  //           authReq.user.id,
+  //           `Created template: ${savedTemplate?.name}`
+  //         );
+  //       }
+  //     } catch (logError) {
+  //       console.error("Failed to log user activity:", logError);
+  //     }
+
+  //     return res.status(201).json({
+  //       message: "Template created successfully",
+  //       template: savedTemplate,
+  //     });
+  //   } catch (error) {
+  //     console.error("Create template error:", error);
+  //     return res.status(500).json({ message: "Internal server error" });
+  //   }
+  // },
+
+  // createTemplate: async (req: Request, res: Response) => {
+  //   try {
+  //     const {
+  //       name,
+  //       language,
+  //       category_id,
+  //       message,
+  //       variables,
+  //       media, // Array: { filename: string, filepath: string, type: string }
+  //       action_buttons,
+  //       is_active,
+  //       register_to_whatsapp,
+  //     } = req.body;
+
+  //     if (!name || !language || !category_id || !message) {
+  //       return res.status(400).json({ message: "Missing required fields" });
+  //     }
+
+  //     const categoryRepo = AppDataSource.getRepository(Category);
+  //     const templateRepo = AppDataSource.getRepository(Template);
+  //     const variableRepo = AppDataSource.getRepository(Variable);
+  //     const mediaRepo = AppDataSource.getRepository(TemplateMedia);
+
+  //     const existingTemplate = await templateRepo.findOne({ where: { name } });
+  //     if (existingTemplate) {
+  //       return res
+  //         .status(400)
+  //         .json({ message: "Template name already exists" });
+  //     }
+
+  //     const category = await categoryRepo.findOne({
+  //       where: { id: category_id },
+  //     });
+  //     if (!category) {
+  //       return res.status(404).json({ message: "Category not found" });
+  //     }
+
+  //     const template = templateRepo.create({
+  //       name,
+  //       language,
+  //       category_id,
+  //       message,
+  //       is_active: is_active || false,
+  //       is_drafted: true,
+  //       is_approved: false,
+  //       status: TemplateStatus.PENDING,
+  //     });
+  //     await templateRepo.save(template);
+
+  //     // Save variables
+  //     if (variables?.length) {
+  //       await variableRepo.save(
+  //         variables.map((v: any) =>
+  //           variableRepo.create({
+  //             template_id: template.id,
+  //             name: v.name,
+  //             default_value: v.default_value || undefined,
+  //             is_required: v.is_required ?? false,
+  //           })
+  //         )
+  //       );
+  //     }
+
+  //     // Save media in DB
+  //     let savedMedia = [];
+  //     if (media?.length) {
+  //       savedMedia = await mediaRepo.save(
+  //         media.map((m: any) =>
+  //           mediaRepo.create({
+  //             template_id: template.id, // can use template_id directly
+  //             filename: m.filename,
+  //           })
+  //         )
+  //       );
+  //     }
+
+  //     // Reload template with relations
+  //     let savedTemplate = await templateRepo.findOne({
+  //       where: { id: template.id },
+  //       relations: ["category", "variables", "media"],
+  //     });
+
+  //     // Register to WhatsApp
+  //     if (register_to_whatsapp) {
+  //       const userRepo = AppDataSource.getRepository(User);
+  //       const admin = await userRepo.findOne({
+  //         where: { role: UserRole.ADMIN },
+  //       });
+
+  //       if (!admin?.whatsapp_api_token || !admin.whatsapp_business_phone) {
+  //         return res.status(400).json({
+  //           message:
+  //             "Template created but WA registration failed: missing admin config",
+  //           template: savedTemplate,
+  //         });
+  //       }
+
+  //       const whatsappBusinessAccountId =
+  //         process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+  //       const phoneNumberId = admin.whatsapp_business_phone;
+  //       if (!whatsappBusinessAccountId) {
+  //         return res.status(500).json({ message: "WABA ID not configured" });
+  //       }
+
+  //       // Step 1: Upload media to WhatsApp to get media_id
+  //       let mediaId: string | null = null;
+  //       if (savedMedia.length) {
+  //         const file = savedMedia[0];
+  //         const form = new FormData();
+  //         form.append("file", fs.createReadStream(path.resolve(file.url)));
+  //         form.append("type", file.type.toLowerCase());
+
+  //         const uploadRes = await axios.post(
+  //           `https://graph.facebook.com/v19.0/${phoneNumberId}/media`,
+  //           form,
+  //           {
+  //             headers: {
+  //               Authorization: `Bearer ${admin.whatsapp_api_token}`,
+  //               ...form.getHeaders(),
+  //             },
+  //           }
+  //         );
+
+  //         mediaId = uploadRes.data.id;
+  //       }
+
+  //       // Step 2: Build WhatsApp components
+  //       const components: any[] = [
+  //         {
+  //           type: "BODY",
+  //           text: message,
+  //           example: {
+  //             body_text: [
+  //               variables?.map((v: any) => v.default_value || "Sample") || [],
+  //             ],
+  //           },
+  //         },
+  //       ];
+
+  //       if (mediaId) {
+  //         components.push({
+  //           type: "HEADER",
+  //           format: savedMedia[0].type?.toUpperCase() || "IMAGE",
+  //           example: { header_handle: [mediaId] },
+  //         });
+  //       }
+
+  //       if (action_buttons?.length) {
+  //         components.push({
+  //           type: "BUTTONS",
+  //           buttons: action_buttons.map((btn: any) => ({
+  //             type: btn.type.toUpperCase(),
+  //             text: btn.text,
+  //             ...(btn.url ? { url: btn.url } : {}),
+  //             ...(btn.phone_number ? { phone_number: btn.phone_number } : {}),
+  //           })),
+  //         });
+  //       }
+
+  //       // Step 3: Register template with WhatsApp
+  //       try {
+  //         const waRes = await axios.post(
+  //           `https://graph.facebook.com/v19.0/${whatsappBusinessAccountId}/message_templates`,
+  //           {
+  //             name,
+  //             category: category.name.toUpperCase(),
+  //             language,
+  //             parameter_format: "POSITIONAL",
+  //             components,
+  //           },
+  //           {
+  //             headers: {
+  //               Authorization: `Bearer ${admin.whatsapp_api_token}`,
+  //               "Content-Type": "application/json",
+  //             },
+  //           }
+  //         );
+
+  //         return res.status(201).json({
+  //           message: "Template created & registered with WhatsApp",
+  //           template: savedTemplate,
+  //           whatsapp_registration: waRes.data,
+  //         });
+  //       } catch (error: any) {
+  //         return res.status(201).json({
+  //           message: "Template created but WA registration failed",
+  //           template: savedTemplate,
+  //           whatsapp_error: error.response?.data || error.message,
+  //         });
+  //       }
+  //     }
+
+  //     // Log activity
+  //     try {
+  //       const authReq = req as any;
+  //       if (authReq.user?.id) {
+  //         await LogActivityController.logUserActivity(
+  //           authReq.user.id,
+  //           `Created template: ${savedTemplate?.name}`
+  //         );
+  //       }
+  //     } catch (logError) {
+  //       console.error("Activity log error:", logError);
+  //     }
+
+  //     return res.status(201).json({
+  //       message: "Template created successfully",
+  //       template: savedTemplate,
+  //     });
+  //   } catch (error) {
+  //     console.error("Create template error:", error);
+  //     return res.status(500).json({ message: "Internal server error" });
+  //   }
+  // },
 
   updateTemplate: async (req: Request, res: Response) => {
     try {
