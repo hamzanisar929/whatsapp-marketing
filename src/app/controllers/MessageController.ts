@@ -11,6 +11,7 @@ import fs from "fs";
 import cron from "node-cron";
 import SocketServer from "../socket/SocketServer";
 import { LogActivityController } from "./LogActivityController";
+import { TemplateMedia } from "../../database/entities/TemplateMedia";
 
 // Global type declaration for socketServer
 declare global {
@@ -541,9 +542,15 @@ export const MessageController = {
   // WhatsApp Webhook verification endpoint
   verifyWebhook: async (req: Request, res: Response) => {
     try {
+      console.log("---- Incoming Webhook Verification Request ----");
+      console.log("Headers:", req.headers);
+      console.log("Query:", req.query);
+      console.log("Params:", req.params);
+      console.log("Body:", req.body);
+      console.log("-----------------------------------------------");
       const mode = req.query["hub.mode"];
-      const token = req.query["hub.verify_token"];
       const challenge = req.query["hub.challenge"];
+      const token = req.query["hub.verify_token"];
 
       // Verify the webhook with your verify token
       const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
@@ -739,6 +746,164 @@ export const MessageController = {
   },
 
   // Send template Message add chat functionality
+  // sendTemplateMessage: async (req: AuthenticatedRequest, res: Response) => {
+  //   try {
+  //     const { receiver_id, template_id, variables } = req.body;
+  //     const sender_id = req.user!.id;
+
+  //     const userRepository = AppDataSource.getRepository(User);
+  //     const receiver = await userRepository.findOne({
+  //       where: { id: receiver_id },
+  //     });
+  //     const sender = await userRepository.findOne({ where: { id: sender_id } });
+
+  //     if (!receiver) {
+  //       return res.status(404).json({ message: "Receiver not found" });
+  //     }
+  //     if (
+  //       !sender ||
+  //       !sender.whatsapp_api_token ||
+  //       !sender.whatsapp_business_phone
+  //     ) {
+  //       return res
+  //         .status(400)
+  //         .json({ message: "Sender WhatsApp API config missing" });
+  //     }
+
+  //     const templateRepository = AppDataSource.getRepository(Template);
+  //     const template = await templateRepository.findOne({
+  //       where: { id: template_id },
+  //       relations: ["variables"],
+  //     });
+
+  //     if (!template) {
+  //       return res.status(404).json({ message: "Template not found" });
+  //     }
+
+  //     // Prepare WhatsApp API template message payload
+  //     const components = [];
+  //     // if (template.variables && variables) {
+  //     //   const params = template.variables.map((v: any) => ({
+  //     //     type: "text",
+  //     //     text: variables[v.name] || v.default_value || "",
+  //     //   }));
+  //     //   components.push({
+  //     //     type: "body",
+  //     //     parameters: params,
+  //     //   });
+  //     // }
+
+  //     if (variables && Array.isArray(variables)) {
+  //       components.push({
+  //         type: "body",
+  //         parameters: variables,
+  //       });
+  //     } else if (template.variables && variables) {
+  //       const params = template.variables.map((v: any) => ({
+  //         type: "text",
+  //         text: variables[v.name] || v.default_value || "",
+  //       }));
+  //       components.push({
+  //         type: "body",
+  //         parameters: params,
+  //       });
+  //     }
+
+  //     let waResponse = null;
+  //     let waError = null;
+  //     let waStatus = "sent";
+  //     try {
+  //       // First, get the WhatsApp Business Account ID
+  //       const wbaResponse = await axios.get(
+  //         `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}`,
+  //         {
+  //           headers: {
+  //             Authorization: `Bearer ${sender.whatsapp_api_token}`,
+  //             "Content-Type": "application/json",
+  //           },
+  //         }
+  //       );
+
+  //       const phoneNumberId = sender.whatsapp_business_phone;
+
+  //       // Send the template message using the phone number ID
+  //       // Note: For sending messages, we use the phone number ID, not the business account ID
+  //       waResponse = await axios.post(
+  //         `https://graph.facebook.com/v17.0/${phoneNumberId}/messages`,
+  //         {
+  //           messaging_product: "whatsapp",
+  //           to: receiver.phone,
+  //           type: "template",
+  //           template: {
+  //             name: template.name,
+  //             language: { code: template.language },
+  //             components,
+  //           },
+  //         },
+  //         {
+  //           headers: {
+  //             Authorization: `Bearer ${sender.whatsapp_api_token}`,
+  //             "Content-Type": "application/json",
+  //           },
+  //         }
+  //       );
+  //       waStatus = "sent";
+  //     } catch (err: any) {
+  //       waError = err.response?.data || err.message;
+  //       waStatus = "failed";
+  //     }
+
+  //     if (waStatus === "failed") {
+  //       return res.status(500).json({
+  //         message: "Failed to send template via WhatsApp API",
+  //         error: waError,
+  //       });
+  //     }
+
+  //     const chatRepository = AppDataSource.getRepository(Chat);
+  //     let chat = await chatRepository.findOne({
+  //       where: [
+  //         { sender_id: sender_id, receiver_id: receiver_id },
+  //         { sender_id: receiver_id, receiver_id: sender_id },
+  //       ],
+  //     });
+
+  //     if (!chat) {
+  //       chat = chatRepository.create({ sender_id, receiver_id });
+  //       await chatRepository.save(chat);
+  //     }
+
+  //     const messageRepository = AppDataSource.getRepository(Message);
+  //     const message = messageRepository.create({
+  //       user_id: sender_id,
+  //       messageable_type: "template",
+  //       messageable_id: chat?.id,
+  //       status: waStatus,
+  //     });
+  //     await messageRepository.save(message);
+
+  //     // Log user activity
+  //     try {
+  //       await LogActivityController.logUserActivity(
+  //         sender_id,
+  //         `Sent template message '${template.name}' to ${receiver.first_name} ${receiver.last_name}`
+  //       );
+  //     } catch (logError) {
+  //       console.error("Failed to log user activity:", logError);
+  //     }
+
+  //     return res.status(201).json({
+  //       message: "Template message sent successfully via WhatsApp API",
+  //       data: message,
+  //       wa_response: waResponse?.data,
+  //     });
+  //   } catch (error) {
+  //     console.error("Send template message error:", error);
+  //     return res.status(500).json({ message: "Internal server error" });
+  //   }
+  // },
+
+  // Sending Media Templates
   sendTemplateMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { receiver_id, template_id, variables } = req.body;
@@ -773,19 +938,38 @@ export const MessageController = {
         return res.status(404).json({ message: "Template not found" });
       }
 
-      // Prepare WhatsApp API template message payload
-      const components = [];
-      // if (template.variables && variables) {
-      //   const params = template.variables.map((v: any) => ({
-      //     type: "text",
-      //     text: variables[v.name] || v.default_value || "",
-      //   }));
-      //   components.push({
-      //     type: "body",
-      //     parameters: params,
-      //   });
-      // }
+      // 🔹 Get media for the template (if exists)
+      const templateMediaRepo = AppDataSource.getRepository(TemplateMedia);
+      const media = await templateMediaRepo.findOne({
+        where: { template_id: template.id },
+      });
 
+      // Prepare WhatsApp API template message payload
+      const components: any[] = [];
+
+      // Add media header if exists
+      if (media && typeof media.type === "string" && media.wa_media_id) {
+        const lowerType = media.type.toLowerCase();
+
+        components.push({
+          type: "header",
+          parameters: [
+            {
+              type: lowerType, // "image", "video", "document"
+              image:
+                lowerType === "image" ? { id: media.wa_media_id } : undefined,
+              video:
+                lowerType === "video" ? { id: media.wa_media_id } : undefined,
+              document:
+                lowerType === "document"
+                  ? { id: media.wa_media_id }
+                  : undefined,
+            },
+          ],
+        });
+      }
+
+      // Add body variables
       if (variables && Array.isArray(variables)) {
         components.push({
           type: "body",
@@ -805,22 +989,10 @@ export const MessageController = {
       let waResponse = null;
       let waError = null;
       let waStatus = "sent";
-      try {
-        // First, get the WhatsApp Business Account ID
-        const wbaResponse = await axios.get(
-          `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}`,
-          {
-            headers: {
-              Authorization: `Bearer ${sender.whatsapp_api_token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
 
+      try {
         const phoneNumberId = sender.whatsapp_business_phone;
 
-        // Send the template message using the phone number ID
-        // Note: For sending messages, we use the phone number ID, not the business account ID
         waResponse = await axios.post(
           `https://graph.facebook.com/v17.0/${phoneNumberId}/messages`,
           {
@@ -840,7 +1012,6 @@ export const MessageController = {
             },
           }
         );
-        waStatus = "sent";
       } catch (err: any) {
         waError = err.response?.data || err.message;
         waStatus = "failed";
@@ -875,15 +1046,10 @@ export const MessageController = {
       });
       await messageRepository.save(message);
 
-      // Log user activity
-      try {
-        await LogActivityController.logUserActivity(
-          sender_id,
-          `Sent template message '${template.name}' to ${receiver.first_name} ${receiver.last_name}`
-        );
-      } catch (logError) {
-        console.error("Failed to log user activity:", logError);
-      }
+      await LogActivityController.logUserActivity(
+        sender_id,
+        `Sent template message '${template.name}' to ${receiver.first_name} ${receiver.last_name}`
+      );
 
       return res.status(201).json({
         message: "Template message sent successfully via WhatsApp API",

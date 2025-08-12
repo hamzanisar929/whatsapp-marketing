@@ -72,6 +72,7 @@ router.post(
   "/templates",
   authenticate,
   authorize([UserRole.ADMIN, UserRole.USER]),
+  upload.single("file"),
   TemplateController.TemplateController.createTemplate
 );
 
@@ -92,6 +93,13 @@ router.post(
   authenticate,
   TemplateController.TemplateController.addTemplateMedia
 );
+
+// router.post(
+//   "/upload-image",
+//   authenticate,
+//   upload.single("file"),
+//   TemplateController.TemplateController.uploadImage
+// );
 
 // Message routes
 router.post(
