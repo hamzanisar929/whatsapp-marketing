@@ -518,182 +518,6 @@ export const TemplateController = {
   // },
 
   // Working create template controller
-  createTemplate: async (req: Request, res: Response) => {
-    try {
-      const {
-        name,
-        language,
-        category_id,
-        message,
-        variables,
-        is_active,
-        register_to_whatsapp,
-      }: {
-        name: string;
-        language: string;
-        category_id: number;
-        message: string;
-        variables?: {
-          name: string;
-          default_value?: string;
-          is_required?: boolean;
-        }[];
-        is_active?: boolean;
-        register_to_whatsapp?: boolean;
-      } = req.body;
-
-      if (!name || !language || !category_id || !message) {
-        return res.status(400).json({
-          message:
-            "Missing required fields: name, language, category_id, or message.",
-        });
-      }
-
-      const categoryRepository = AppDataSource.getRepository(Category);
-      const templateRepository = AppDataSource.getRepository(Template);
-      const variableRepository = AppDataSource.getRepository(Variable);
-
-      const existingTemplate = await templateRepository.findOne({
-        where: { name },
-      });
-      if (existingTemplate) {
-        return res.status(400).json({
-          message: "Another template with the same name already exists.",
-        });
-      }
-
-      const category = await categoryRepository.findOne({
-        where: { id: category_id },
-      });
-
-      if (!category) {
-        return res.status(404).json({ message: "Category not found" });
-      }
-
-      const template = templateRepository.create({
-        name,
-        language,
-        category_id,
-        message,
-        is_active: is_active || false,
-        is_drafted: true,
-        is_approved: false,
-        status: TemplateStatus.PENDING,
-      });
-
-      await templateRepository.save(template);
-
-      if (variables && variables.length > 0) {
-        const variableEntities = variables.map((v) =>
-          variableRepository.create({
-            template_id: template.id,
-            name: v.name,
-            default_value: v.default_value || undefined,
-            is_required: v.is_required ?? false,
-          })
-        );
-        await variableRepository.save(variableEntities);
-      }
-
-      let savedTemplate = await templateRepository.findOne({
-        where: { id: template.id },
-        relations: ["category", "variables"],
-      });
-
-      let waRegistrationResponse = null;
-
-      if (register_to_whatsapp) {
-        const userRepository = AppDataSource.getRepository(User);
-        const admin = await userRepository.findOne({
-          where: { role: UserRole.ADMIN },
-        });
-
-        if (!admin?.whatsapp_api_token || !admin.whatsapp_business_phone) {
-          return res.status(400).json({
-            message:
-              "Template created but not registered with WhatsApp: Admin WhatsApp API config missing",
-            template: savedTemplate,
-          });
-        }
-
-        const whatsappBusinessAccountId =
-          process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-        if (!whatsappBusinessAccountId) {
-          return res
-            .status(500)
-            .json({ message: "WhatsApp Business Account ID not configured." });
-        }
-
-        const components: any[] = [
-          {
-            type: "BODY",
-            text: message,
-            example: {
-              body_text: [
-                variables?.map((v) => v.default_value || "Sample") || [],
-              ],
-            },
-          },
-        ];
-
-        try {
-          const waRes = await axios.post(
-            `https://graph.facebook.com/v19.0/${whatsappBusinessAccountId}/message_templates`,
-            {
-              name,
-              category: category.name.toUpperCase(),
-              language,
-              parameter_format: "POSITIONAL",
-              components,
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${admin.whatsapp_api_token}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          waRegistrationResponse = waRes.data;
-
-          return res.status(201).json({
-            message: "Template created and registered with WhatsApp",
-            template: savedTemplate,
-            whatsapp_registration: waRegistrationResponse,
-          });
-        } catch (error: any) {
-          return res.status(201).json({
-            message: "Template created but failed to register with WhatsApp",
-            template: savedTemplate,
-            whatsapp_error: error.response?.data || error.message,
-          });
-        }
-      }
-
-      try {
-        const authReq = req as any;
-        if (authReq.user?.id) {
-          await LogActivityController.logUserActivity(
-            authReq.user.id,
-            `Created template: ${savedTemplate?.name}`
-          );
-        }
-      } catch (logError) {
-        console.error("Failed to log user activity:", logError);
-      }
-
-      return res.status(201).json({
-        message: "Template created successfully",
-        template: savedTemplate,
-      });
-    } catch (error) {
-      console.error("Create template error:", error);
-      return res.status(500).json({ message: "Internal server error" });
-    }
-  },
-
-  // Media Template Controller
-
   // createTemplate: async (req: Request, res: Response) => {
   //   try {
   //     const {
@@ -725,26 +549,28 @@ export const TemplateController = {
   //       });
   //     }
 
-  //     const categoryRepo = AppDataSource.getRepository(Category);
-  //     const templateRepo = AppDataSource.getRepository(Template);
-  //     const variableRepo = AppDataSource.getRepository(Variable);
-  //     const templateMediaRepo = AppDataSource.getRepository(TemplateMedia);
+  //     const categoryRepository = AppDataSource.getRepository(Category);
+  //     const templateRepository = AppDataSource.getRepository(Template);
+  //     const variableRepository = AppDataSource.getRepository(Variable);
 
-  //     const existing = await templateRepo.findOne({ where: { name } });
-  //     if (existing) {
-  //       return res
-  //         .status(400)
-  //         .json({ message: "A template with this name already exists." });
+  //     const existingTemplate = await templateRepository.findOne({
+  //       where: { name },
+  //     });
+  //     if (existingTemplate) {
+  //       return res.status(400).json({
+  //         message: "Another template with the same name already exists.",
+  //       });
   //     }
 
-  //     const category = await categoryRepo.findOne({
+  //     const category = await categoryRepository.findOne({
   //       where: { id: category_id },
   //     });
+
   //     if (!category) {
   //       return res.status(404).json({ message: "Category not found" });
   //     }
 
-  //     const template = templateRepo.create({
+  //     const template = templateRepository.create({
   //       name,
   //       language,
   //       category_id,
@@ -754,21 +580,22 @@ export const TemplateController = {
   //       is_approved: false,
   //       status: TemplateStatus.PENDING,
   //     });
-  //     await templateRepo.save(template);
 
-  //     if (variables?.length) {
-  //       const vars = variables.map((v) =>
-  //         variableRepo.create({
+  //     await templateRepository.save(template);
+
+  //     if (variables && variables.length > 0) {
+  //       const variableEntities = variables.map((v) =>
+  //         variableRepository.create({
   //           template_id: template.id,
   //           name: v.name,
-  //           default_value: v.default_value,
+  //           default_value: v.default_value || undefined,
   //           is_required: v.is_required ?? false,
   //         })
   //       );
-  //       await variableRepo.save(vars);
+  //       await variableRepository.save(variableEntities);
   //     }
 
-  //     const savedTemplate = await templateRepo.findOne({
+  //     let savedTemplate = await templateRepository.findOne({
   //       where: { id: template.id },
   //       relations: ["category", "variables"],
   //     });
@@ -776,43 +603,15 @@ export const TemplateController = {
   //     let waRegistrationResponse = null;
 
   //     if (register_to_whatsapp) {
-  //       let headerHandle: string | null = null;
-
-  //       if (req.file || req.body.filePath) {
-  //         try {
-  //           headerHandle = await uploadMediaForTemplateFromSource({
-  //             file: req.file,
-  //             filePath: req.body.filePath,
-  //           });
-
-  //           await templateMediaRepo.save({
-  //             template_id: template.id,
-  //             filename: req.file
-  //               ? req.file.originalname
-  //               : path.basename(req.body.filePath),
-  //             type: "IMAGE", // or detect dynamically if needed
-  //             url: req.body.filePath || null,
-  //             wa_media_id: headerHandle,
-  //           });
-  //         } catch (err: any) {
-  //           return res.status(400).json({
-  //             message: "Media upload for template failed",
-  //             error: err.message || err,
-  //           });
-  //         }
-
-  //         // Wait briefly for Meta to process the upload
-  //         await new Promise((r) => setTimeout(r, 3000));
-  //       }
-
-  //       const userRepo = AppDataSource.getRepository(User);
-  //       const admin = await userRepo.findOne({
+  //       const userRepository = AppDataSource.getRepository(User);
+  //       const admin = await userRepository.findOne({
   //         where: { role: UserRole.ADMIN },
   //       });
-  //       if (!admin?.whatsapp_api_token) {
+
+  //       if (!admin?.whatsapp_api_token || !admin.whatsapp_business_phone) {
   //         return res.status(400).json({
   //           message:
-  //             "Template created, but WhatsApp registration failed: Admin API token is missing",
+  //             "Template created but not registered with WhatsApp: Admin WhatsApp API config missing",
   //           template: savedTemplate,
   //         });
   //       }
@@ -825,27 +624,21 @@ export const TemplateController = {
   //           .json({ message: "WhatsApp Business Account ID not configured." });
   //       }
 
-  //       const components: any[] = [];
-  //       if (headerHandle) {
-  //         components.push({
-  //           type: "HEADER",
-  //           format: "IMAGE",
-  //           example: { header_handle: [String(headerHandle)] },
-  //         });
-  //       }
-  //       components.push({
-  //         type: "BODY",
-  //         text: message,
-  //         example: {
-  //           body_text: [
-  //             variables?.map((v) => v.default_value || "Sample") || [],
-  //           ],
+  //       const components: any[] = [
+  //         {
+  //           type: "BODY",
+  //           text: message,
+  //           example: {
+  //             body_text: [
+  //               variables?.map((v) => v.default_value || "Sample") || [],
+  //             ],
+  //           },
   //         },
-  //       });
+  //       ];
 
   //       try {
-  //         const resp = await axios.post(
-  //           `https://graph.facebook.com/v20.0/${whatsappBusinessAccountId}/message_templates`,
+  //         const waRes = await axios.post(
+  //           `https://graph.facebook.com/v19.0/${whatsappBusinessAccountId}/message_templates`,
   //           {
   //             name,
   //             category: category.name.toUpperCase(),
@@ -861,12 +654,18 @@ export const TemplateController = {
   //           }
   //         );
 
-  //         waRegistrationResponse = resp.data;
-  //       } catch (err: any) {
+  //         waRegistrationResponse = waRes.data;
+
   //         return res.status(201).json({
-  //           message: "Template created but WhatsApp registration failed",
+  //           message: "Template created and registered with WhatsApp",
   //           template: savedTemplate,
-  //           whatsapp_error: err.response?.data || err.message,
+  //           whatsapp_registration: waRegistrationResponse,
+  //         });
+  //       } catch (error: any) {
+  //         return res.status(201).json({
+  //           message: "Template created but failed to register with WhatsApp",
+  //           template: savedTemplate,
+  //           whatsapp_error: error.response?.data || error.message,
   //         });
   //       }
   //     }
@@ -880,19 +679,220 @@ export const TemplateController = {
   //         );
   //       }
   //     } catch (logError) {
-  //       console.error("Activity log failed:", logError);
+  //       console.error("Failed to log user activity:", logError);
   //     }
 
   //     return res.status(201).json({
   //       message: "Template created successfully",
   //       template: savedTemplate,
-  //       whatsapp_registration: waRegistrationResponse,
   //     });
-  //   } catch (err) {
-  //     console.error("CreateTemplate error:", err);
+  //   } catch (error) {
+  //     console.error("Create template error:", error);
   //     return res.status(500).json({ message: "Internal server error" });
   //   }
   // },
+
+  // Media Template Controller
+
+  createTemplate: async (req: Request, res: Response) => {
+    try {
+      const {
+        name,
+        language,
+        category_id,
+        message,
+        variables,
+        is_active,
+        register_to_whatsapp,
+      }: {
+        name: string;
+        language: string;
+        category_id: number;
+        message: string;
+        variables?: {
+          name: string;
+          default_value?: string;
+          is_required?: boolean;
+        }[];
+        is_active?: boolean;
+        register_to_whatsapp?: boolean;
+      } = req.body;
+
+      if (!name || !language || !category_id || !message) {
+        return res.status(400).json({
+          message:
+            "Missing required fields: name, language, category_id, or message.",
+        });
+      }
+
+      const categoryRepo = AppDataSource.getRepository(Category);
+      const templateRepo = AppDataSource.getRepository(Template);
+      const variableRepo = AppDataSource.getRepository(Variable);
+      const templateMediaRepo = AppDataSource.getRepository(TemplateMedia);
+
+      const existing = await templateRepo.findOne({ where: { name } });
+      if (existing) {
+        return res
+          .status(400)
+          .json({ message: "A template with this name already exists." });
+      }
+
+      const category = await categoryRepo.findOne({
+        where: { id: category_id },
+      });
+      if (!category) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+
+      const template = templateRepo.create({
+        name,
+        language,
+        category_id,
+        message,
+        is_active: is_active || false,
+        is_drafted: true,
+        is_approved: false,
+        status: TemplateStatus.PENDING,
+      });
+      await templateRepo.save(template);
+
+      if (variables?.length) {
+        const vars = variables.map((v) =>
+          variableRepo.create({
+            template_id: template.id,
+            name: v.name,
+            default_value: v.default_value,
+            is_required: v.is_required ?? false,
+          })
+        );
+        await variableRepo.save(vars);
+      }
+
+      const savedTemplate = await templateRepo.findOne({
+        where: { id: template.id },
+        relations: ["category", "variables"],
+      });
+
+      let waRegistrationResponse = null;
+
+      if (register_to_whatsapp) {
+        let headerHandle: string | null = null;
+
+        if (req.file || req.body.filePath) {
+          try {
+            headerHandle = await uploadMediaForTemplateFromSource({
+              file: req.file,
+              filePath: req.body.filePath,
+            });
+
+            await templateMediaRepo.save({
+              template_id: template.id,
+              filename: req.file
+                ? req.file.originalname
+                : path.basename(req.body.filePath),
+              type: "IMAGE", // or detect dynamically if needed
+              url: req.body.filePath || null,
+              wa_media_id: headerHandle,
+            });
+          } catch (err: any) {
+            return res.status(400).json({
+              message: "Media upload for template failed",
+              error: err.message || err,
+            });
+          }
+
+          // Wait briefly for Meta to process the upload
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+
+        const userRepo = AppDataSource.getRepository(User);
+        const admin = await userRepo.findOne({
+          where: { role: UserRole.ADMIN },
+        });
+        if (!admin?.whatsapp_api_token) {
+          return res.status(400).json({
+            message:
+              "Template created, but WhatsApp registration failed: Admin API token is missing",
+            template: savedTemplate,
+          });
+        }
+
+        const whatsappBusinessAccountId =
+          process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+        if (!whatsappBusinessAccountId) {
+          return res
+            .status(500)
+            .json({ message: "WhatsApp Business Account ID not configured." });
+        }
+
+        const components: any[] = [];
+        if (headerHandle) {
+          components.push({
+            type: "HEADER",
+            format: "IMAGE",
+            example: { header_handle: [String(headerHandle)] },
+          });
+        }
+        components.push({
+          type: "BODY",
+          text: message,
+          example: {
+            body_text: [
+              variables?.map((v) => v.default_value || "Sample") || [],
+            ],
+          },
+        });
+
+        try {
+          const resp = await axios.post(
+            `https://graph.facebook.com/v20.0/${whatsappBusinessAccountId}/message_templates`,
+            {
+              name,
+              category: category.name.toUpperCase(),
+              language,
+              parameter_format: "POSITIONAL",
+              components,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${admin.whatsapp_api_token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          waRegistrationResponse = resp.data;
+        } catch (err: any) {
+          return res.status(201).json({
+            message: "Template created but WhatsApp registration failed",
+            template: savedTemplate,
+            whatsapp_error: err.response?.data || err.message,
+          });
+        }
+      }
+
+      try {
+        const authReq = req as any;
+        if (authReq.user?.id) {
+          await LogActivityController.logUserActivity(
+            authReq.user.id,
+            `Created template: ${savedTemplate?.name}`
+          );
+        }
+      } catch (logError) {
+        console.error("Activity log failed:", logError);
+      }
+
+      return res.status(201).json({
+        message: "Template created successfully",
+        template: savedTemplate,
+        whatsapp_registration: waRegistrationResponse,
+      });
+    } catch (err) {
+      console.error("CreateTemplate error:", err);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  },
 
   // createTemplate: async (req: Request, res: Response) => {
   //   try {

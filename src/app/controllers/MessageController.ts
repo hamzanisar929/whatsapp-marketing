@@ -12,6 +12,9 @@ import cron from "node-cron";
 import SocketServer from "../socket/SocketServer";
 import { LogActivityController } from "./LogActivityController";
 import { TemplateMedia } from "../../database/entities/TemplateMedia";
+import os from "os";
+import path from "path";
+import FormData from "form-data";
 
 // Global type declaration for socketServer
 declare global {
@@ -607,143 +610,143 @@ export const MessageController = {
       return res.status(500).json({ message: "Internal server error" });
     }
   },
-  sendMessage: async (req: AuthenticatedRequest, res: Response) => {
-    try {
-      const { receiver_id, content, template_id, media_url, media_type } =
-        req.body;
-      const sender_id = req.user!.id;
+  // sendMessage: async (req: AuthenticatedRequest, res: Response) => {
+  //   try {
+  //     const { receiver_id, content, template_id, media_url, media_type } =
+  //       req.body;
+  //     const sender_id = req.user!.id;
 
-      const userRepository = AppDataSource.getRepository(User);
-      const receiver = await userRepository.findOne({
-        where: { id: receiver_id },
-      });
-      const sender = await userRepository.findOne({ where: { id: sender_id } });
+  //     const userRepository = AppDataSource.getRepository(User);
+  //     const receiver = await userRepository.findOne({
+  //       where: { id: receiver_id },
+  //     });
+  //     const sender = await userRepository.findOne({ where: { id: sender_id } });
 
-      if (!receiver) {
-        return res.status(404).json({ message: "Receiver not found" });
-      }
+  //     if (!receiver) {
+  //       return res.status(404).json({ message: "Receiver not found" });
+  //     }
 
-      if (
-        !sender ||
-        !sender.whatsapp_api_token ||
-        !sender.whatsapp_business_phone
-      ) {
-        return res
-          .status(400)
-          .json({ message: "Sender WhatsApp API config missing" });
-      }
+  //     if (
+  //       !sender ||
+  //       !sender.whatsapp_api_token ||
+  //       !sender.whatsapp_business_phone
+  //     ) {
+  //       return res
+  //         .status(400)
+  //         .json({ message: "Sender WhatsApp API config missing" });
+  //     }
 
-      let waResponse = null;
-      let waError = null;
-      let waStatus = "sent";
+  //     let waResponse = null;
+  //     let waError = null;
+  //     let waStatus = "sent";
 
-      try {
-        const headers = {
-          Authorization: `Bearer ${sender.whatsapp_api_token}`,
-          "Content-Type": "application/json",
-        };
+  //     try {
+  //       const headers = {
+  //         Authorization: `Bearer ${sender.whatsapp_api_token}`,
+  //         "Content-Type": "application/json",
+  //       };
 
-        if (media_url && media_type) {
-          // Handle media message with optional caption
-          let mediaPayload: any = {
-            messaging_product: "whatsapp",
-            to: receiver.phone,
-            type: media_type,
-          };
+  //       if (media_url && media_type) {
+  //         // Handle media message with optional caption
+  //         let mediaPayload: any = {
+  //           messaging_product: "whatsapp",
+  //           to: receiver.phone,
+  //           type: media_type,
+  //         };
 
-          const supportedMediaTypes = ["image", "video", "document"];
+  //         const supportedMediaTypes = ["image", "video", "document"];
 
-          if (!supportedMediaTypes.includes(media_type)) {
-            return res.status(400).json({ message: "Unsupported media type" });
-          }
+  //         if (!supportedMediaTypes.includes(media_type)) {
+  //           return res.status(400).json({ message: "Unsupported media type" });
+  //         }
 
-          // Attach media with optional caption
-          mediaPayload[media_type] = {
-            link: media_url,
-            ...(content ? { caption: content } : {}),
-          };
+  //         // Attach media with optional caption
+  //         mediaPayload[media_type] = {
+  //           link: media_url,
+  //           ...(content ? { caption: content } : {}),
+  //         };
 
-          waResponse = await axios.post(
-            `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-            mediaPayload,
-            { headers }
-          );
-        } else if (content) {
-          // Plain text message only
-          waResponse = await axios.post(
-            `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-            {
-              messaging_product: "whatsapp",
-              to: receiver.phone,
-              type: "text",
-              text: { body: content, preview_url: false },
-            },
-            { headers }
-          );
-        } else {
-          return res
-            .status(400)
-            .json({ message: "No content or media provided" });
-        }
-      } catch (err: any) {
-        waError = err.response?.data || err.message;
-        waStatus = "failed";
-      }
+  //         waResponse = await axios.post(
+  //           `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
+  //           mediaPayload,
+  //           { headers }
+  //         );
+  //       } else if (content) {
+  //         // Plain text message only
+  //         waResponse = await axios.post(
+  //           `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
+  //           {
+  //             messaging_product: "whatsapp",
+  //             to: receiver.phone,
+  //             type: "text",
+  //             text: { body: content, preview_url: false },
+  //           },
+  //           { headers }
+  //         );
+  //       } else {
+  //         return res
+  //           .status(400)
+  //           .json({ message: "No content or media provided" });
+  //       }
+  //     } catch (err: any) {
+  //       waError = err.response?.data || err.message;
+  //       waStatus = "failed";
+  //     }
 
-      // Get or create chat between sender and receiver
-      const chatRepository = AppDataSource.getRepository(Chat);
-      let chat = await chatRepository.findOne({
-        where: [
-          { sender_id, receiver_id },
-          { sender_id: receiver_id, receiver_id: sender_id },
-        ],
-      });
+  //     // Get or create chat between sender and receiver
+  //     const chatRepository = AppDataSource.getRepository(Chat);
+  //     let chat = await chatRepository.findOne({
+  //       where: [
+  //         { sender_id, receiver_id },
+  //         { sender_id: receiver_id, receiver_id: sender_id },
+  //       ],
+  //     });
 
-      if (!chat) {
-        chat = chatRepository.create({ sender_id, receiver_id });
-        await chatRepository.save(chat);
-      }
+  //     if (!chat) {
+  //       chat = chatRepository.create({ sender_id, receiver_id });
+  //       await chatRepository.save(chat);
+  //     }
 
-      // Save message
-      const messageRepository = AppDataSource.getRepository(Message);
-      const message = messageRepository.create({
-        user_id: sender_id,
-        messageable_type: "chat",
-        messageable_id: chat.id,
-        status: waStatus,
-        content: content || media_url,
-        media_type: media_type || null,
-        media_url: media_url || null,
-      });
-      await messageRepository.save(message);
+  //     // Save message
+  //     const messageRepository = AppDataSource.getRepository(Message);
+  //     const message = messageRepository.create({
+  //       user_id: sender_id,
+  //       messageable_type: "chat",
+  //       messageable_id: chat.id,
+  //       status: waStatus,
+  //       content: content || media_url,
+  //       media_type: media_type || null,
+  //       media_url: media_url || null,
+  //     });
+  //     await messageRepository.save(message);
 
-      if (waStatus === "failed") {
-        return res.status(500).json({
-          message: "Failed to send via WhatsApp API",
-          error: waError,
-        });
-      }
+  //     if (waStatus === "failed") {
+  //       return res.status(500).json({
+  //         message: "Failed to send via WhatsApp API",
+  //         error: waError,
+  //       });
+  //     }
 
-      // Log user activity
-      try {
-        await LogActivityController.logUserActivity(
-          sender_id,
-          `Sent message to ${receiver.first_name} ${receiver.last_name}`
-        );
-      } catch (logError) {
-        console.error("Failed to log user activity:", logError);
-      }
+  //     // Log user activity
+  //     try {
+  //       await LogActivityController.logUserActivity(
+  //         sender_id,
+  //         `Sent message to ${receiver.first_name} ${receiver.last_name}`
+  //       );
+  //     } catch (logError) {
+  //       console.error("Failed to log user activity:", logError);
+  //     }
 
-      return res.status(201).json({
-        message: "Message sent successfully via WhatsApp API",
-        data: message,
-        wa_response: waResponse?.data,
-      });
-    } catch (error) {
-      console.error("Send message error:", error);
-      return res.status(500).json({ message: "Internal server error" });
-    }
-  },
+  //     return res.status(201).json({
+  //       message: "Message sent successfully via WhatsApp API",
+  //       data: message,
+  //       wa_response: waResponse?.data,
+  //     });
+  //   } catch (error) {
+  //     console.error("Send message error:", error);
+  //     return res.status(500).json({ message: "Internal server error" });
+  //   }
+  // },
 
   // Send template Message add chat functionality
   // sendTemplateMessage: async (req: AuthenticatedRequest, res: Response) => {
@@ -904,6 +907,471 @@ export const MessageController = {
   // },
 
   // Sending Media Templates
+  // sendTemplateMessage: async (req: AuthenticatedRequest, res: Response) => {
+  //   try {
+  //     const { receiver_id, template_id, variables } = req.body;
+  //     const sender_id = req.user!.id;
+
+  //     const userRepository = AppDataSource.getRepository(User);
+  //     const receiver = await userRepository.findOne({
+  //       where: { id: receiver_id },
+  //     });
+  //     const sender = await userRepository.findOne({ where: { id: sender_id } });
+
+  //     if (!receiver) {
+  //       return res.status(404).json({ message: "Receiver not found" });
+  //     }
+  //     if (
+  //       !sender ||
+  //       !sender.whatsapp_api_token ||
+  //       !sender.whatsapp_business_phone
+  //     ) {
+  //       return res
+  //         .status(400)
+  //         .json({ message: "Sender WhatsApp API config missing" });
+  //     }
+
+  //     const templateRepository = AppDataSource.getRepository(Template);
+  //     const template = await templateRepository.findOne({
+  //       where: { id: template_id },
+  //       relations: ["variables"],
+  //     });
+
+  //     if (!template) {
+  //       return res.status(404).json({ message: "Template not found" });
+  //     }
+
+  //     // 🔹 Get media for the template (if exists)
+  //     const templateMediaRepo = AppDataSource.getRepository(TemplateMedia);
+  //     const media = await templateMediaRepo.findOne({
+  //       where: { template_id: template.id },
+  //     });
+
+  //     // Prepare WhatsApp API template message payload
+  //     const components: any[] = [];
+
+  //     // Add media header if exists
+  //     if (media && typeof media.type === "string" && media.wa_media_id) {
+  //       const lowerType = media.type.toLowerCase();
+
+  //       components.push({
+  //         type: "header",
+  //         parameters: [
+  //           {
+  //             type: lowerType, // "image", "video", "document"
+  //             image:
+  //               lowerType === "image" ? { id: media.wa_media_id } : undefined,
+  //             video:
+  //               lowerType === "video" ? { id: media.wa_media_id } : undefined,
+  //             document:
+  //               lowerType === "document"
+  //                 ? { id: media.wa_media_id }
+  //                 : undefined,
+  //           },
+  //         ],
+  //       });
+  //     }
+
+  //     // Add body variables
+  //     if (variables && Array.isArray(variables)) {
+  //       components.push({
+  //         type: "body",
+  //         parameters: variables,
+  //       });
+  //     } else if (template.variables && variables) {
+  //       const params = template.variables.map((v: any) => ({
+  //         type: "text",
+  //         text: variables[v.name] || v.default_value || "",
+  //       }));
+  //       components.push({
+  //         type: "body",
+  //         parameters: params,
+  //       });
+  //     }
+
+  //     let waResponse = null;
+  //     let waError = null;
+  //     let waStatus = "sent";
+
+  //     try {
+  //       const phoneNumberId = sender.whatsapp_business_phone;
+
+  //       waResponse = await axios.post(
+  //         `https://graph.facebook.com/v17.0/${phoneNumberId}/messages`,
+  //         {
+  //           messaging_product: "whatsapp",
+  //           to: receiver.phone,
+  //           type: "template",
+  //           template: {
+  //             name: template.name,
+  //             language: { code: template.language },
+  //             components,
+  //           },
+  //         },
+  //         {
+  //           headers: {
+  //             Authorization: `Bearer ${sender.whatsapp_api_token}`,
+  //             "Content-Type": "application/json",
+  //           },
+  //         }
+  //       );
+  //     } catch (err: any) {
+  //       waError = err.response?.data || err.message;
+  //       waStatus = "failed";
+  //     }
+
+  //     if (waStatus === "failed") {
+  //       return res.status(500).json({
+  //         message: "Failed to send template via WhatsApp API",
+  //         error: waError,
+  //       });
+  //     }
+
+  //     const chatRepository = AppDataSource.getRepository(Chat);
+  //     let chat = await chatRepository.findOne({
+  //       where: [
+  //         { sender_id: sender_id, receiver_id: receiver_id },
+  //         { sender_id: receiver_id, receiver_id: sender_id },
+  //       ],
+  //     });
+
+  //     if (!chat) {
+  //       chat = chatRepository.create({ sender_id, receiver_id });
+  //       await chatRepository.save(chat);
+  //     }
+
+  //     const messageRepository = AppDataSource.getRepository(Message);
+  //     const message = messageRepository.create({
+  //       user_id: sender_id,
+  //       messageable_type: "template",
+  //       messageable_id: chat?.id,
+  //       status: waStatus,
+  //     });
+  //     await messageRepository.save(message);
+
+  //     await LogActivityController.logUserActivity(
+  //       sender_id,
+  //       `Sent template message '${template.name}' to ${receiver.first_name} ${receiver.last_name}`
+  //     );
+
+  //     return res.status(201).json({
+  //       message: "Template message sent successfully via WhatsApp API",
+  //       data: message,
+  //       wa_response: waResponse?.data,
+  //     });
+  //   } catch (error) {
+  //     console.error("Send template message error:", error);
+  //     return res.status(500).json({ message: "Internal server error" });
+  //   }
+  // },
+
+  // sendMessage: async (req: AuthenticatedRequest, res: Response) => {
+  //   try {
+  //     const { receiver_id, content, media_url, media_type } = req.body;
+  //     const sender_id = req.user!.id;
+
+  //     const userRepository = AppDataSource.getRepository(User);
+  //     const receiver = await userRepository.findOne({
+  //       where: { id: receiver_id },
+  //     });
+  //     const sender = await userRepository.findOne({ where: { id: sender_id } });
+
+  //     if (!receiver)
+  //       return res.status(404).json({ message: "Receiver not found" });
+  //     if (!sender?.whatsapp_api_token || !sender?.whatsapp_business_phone)
+  //       return res
+  //         .status(400)
+  //         .json({ message: "Sender WhatsApp API config missing" });
+
+  //     let waStatus = "sent";
+  //     let waResponse = null;
+  //     let waError = null;
+  //     const headers = { Authorization: `Bearer ${sender.whatsapp_api_token}` };
+
+  //     try {
+  //       if (media_url && media_type) {
+  //         const supportedMediaTypes = ["image", "video", "document"];
+  //         if (!supportedMediaTypes.includes(media_type)) {
+  //           return res.status(400).json({ message: "Unsupported media type" });
+  //         }
+
+  //         let mediaId = null;
+
+  //         // Step 1 — Upload media to WhatsApp
+  //         if (!media_url.startsWith("http")) {
+  //           // Local file — upload
+  //           const filePath = path.isAbsolute(media_url)
+  //             ? media_url
+  //             : path.join(process.cwd(), media_url);
+  //           if (!fs.existsSync(filePath)) {
+  //             return res.status(400).json({ message: "Media file not found" });
+  //           }
+
+  //           const formData = new FormData();
+  //           formData.append("file", fs.createReadStream(filePath));
+  //           formData.append("type", media_type);
+  //           formData.append("messaging_product", "whatsapp");
+
+  //           const uploadRes = await axios.post(
+  //             `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/media`,
+  //             formData,
+  //             {
+  //               headers: {
+  //                 ...formData.getHeaders(),
+  //                 Authorization: `Bearer ${sender.whatsapp_api_token}`,
+  //               },
+  //             }
+  //           );
+  //           mediaId = uploadRes.data.id;
+  //         } else {
+  //           // Remote file — try using direct link
+  //           mediaId = null; // we can send by link without upload
+  //         }
+
+  //         // Step 2 — Send media message
+  //         let mediaPayload: any = {
+  //           messaging_product: "whatsapp",
+  //           to: receiver.phone,
+  //           type: media_type,
+  //         };
+
+  //         if (mediaId) {
+  //           mediaPayload[media_type] = {
+  //             id: mediaId,
+  //             ...(content ? { caption: content } : {}),
+  //           };
+  //         } else {
+  //           mediaPayload[media_type] = {
+  //             link: media_url,
+  //             ...(content ? { caption: content } : {}),
+  //           };
+  //         }
+
+  //         waResponse = await axios.post(
+  //           `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
+  //           mediaPayload,
+  //           { headers: { ...headers, "Content-Type": "application/json" } }
+  //         );
+  //       } else if (content) {
+  //         // Plain text
+  //         waResponse = await axios.post(
+  //           `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
+  //           {
+  //             messaging_product: "whatsapp",
+  //             to: receiver.phone,
+  //             type: "text",
+  //             text: { body: content, preview_url: false },
+  //           },
+  //           { headers: { ...headers, "Content-Type": "application/json" } }
+  //         );
+  //       } else {
+  //         return res
+  //           .status(400)
+  //           .json({ message: "No content or media provided" });
+  //       }
+  //     } catch (err: any) {
+  //       waError = err.response?.data || err.message;
+  //       waStatus = "failed";
+  //     }
+
+  //     // Get or create chat
+  //     const chatRepository = AppDataSource.getRepository(Chat);
+  //     let chat = await chatRepository.findOne({
+  //       where: [
+  //         { sender_id, receiver_id },
+  //         { sender_id: receiver_id, receiver_id: sender_id },
+  //       ],
+  //     });
+  //     if (!chat) {
+  //       chat = chatRepository.create({ sender_id, receiver_id });
+  //       await chatRepository.save(chat);
+  //     }
+
+  //     // Save message
+  //     const messageRepository = AppDataSource.getRepository(Message);
+  //     const message = messageRepository.create({
+  //       user: { id: sender_id } as User,
+  //       messageable_type: "chat",
+  //       messageable_id: chat.id,
+  //       status: waStatus,
+  //       content: content || media_url,
+  //       media_type: media_type || null,
+  //       media_url: media_url || null,
+  //     });
+  //     await messageRepository.save(message);
+
+  //     if (waStatus === "failed") {
+  //       return res
+  //         .status(500)
+  //         .json({ message: "Failed to send via WhatsApp API", error: waError });
+  //     }
+
+  //     return res.status(201).json({
+  //       message: "Message sent successfully via WhatsApp API",
+  //       data: message,
+  //       wa_response: waResponse?.data,
+  //     });
+  //   } catch (error) {
+  //     console.error("Send message error:", error);
+  //     return res.status(500).json({ message: "Internal server error" });
+  //   }
+  // },
+
+  sendMessage: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { receiver_id, content, media_url, media_type } = req.body;
+      const sender_id = req.user!.id;
+
+      // validate user & target
+      const userRepo = AppDataSource.getRepository(User);
+      const receiver = await userRepo.findOne({ where: { id: receiver_id } });
+      const sender = await userRepo.findOne({ where: { id: sender_id } });
+
+      if (!receiver)
+        return res.status(404).json({ message: "Receiver not found" });
+      if (!sender?.whatsapp_api_token || !sender?.whatsapp_business_phone) {
+        return res
+          .status(400)
+          .json({ message: "Sender WhatsApp API config missing" });
+      }
+
+      let waStatus = "sent";
+      let waError = null;
+      let waResponse = null;
+
+      // HTTPS upload & send
+      if (media_url && media_type) {
+        const supportedMedia = ["image", "video", "document"];
+        if (!supportedMedia.includes(media_type)) {
+          return res.status(400).json({ message: "Unsupported media type" });
+        }
+
+        let mediaId: string | null = null;
+        const phoneId = sender.whatsapp_business_phone;
+        const authHeader = {
+          Authorization: `Bearer ${sender.whatsapp_api_token}`,
+        };
+
+        if (!media_url.startsWith("http")) {
+          // Upload local file first
+          const filePath = path.isAbsolute(media_url)
+            ? media_url
+            : path.join(process.cwd(), media_url);
+          if (!fs.existsSync(filePath)) {
+            return res.status(400).json({ message: "Media file not found" });
+          }
+
+          const form = new FormData();
+          form.append("file", fs.createReadStream(filePath));
+          form.append("type", media_type);
+          form.append("messaging_product", "whatsapp");
+
+          const uploadRes = await axios.post(
+            `https://graph.facebook.com/v20.0/${phoneId}/media`,
+            form,
+            { headers: { ...form.getHeaders(), ...authHeader } }
+          );
+          mediaId = uploadRes.data.id;
+          console.log(mediaId);
+        }
+
+        const payload: any = {
+          messaging_product: "whatsapp",
+          to: receiver.phone,
+          type: media_type,
+        };
+        payload[media_type] = mediaId
+          ? { id: mediaId, ...(content ? { caption: content } : {}) }
+          : { link: media_url, ...(content ? { caption: content } : {}) };
+
+        try {
+          waResponse = await axios.post(
+            `https://graph.facebook.com/v20.0/${phoneId}/messages`,
+            payload,
+            { headers: { "Content-Type": "application/json", ...authHeader } }
+          );
+        } catch (err: any) {
+          waError = err.response?.data || err.message;
+          waStatus = "failed";
+        }
+      } else if (content) {
+        // Text only path
+        try {
+          waResponse = await axios.post(
+            `https://graph.facebook.com/v20.0/${sender.whatsapp_business_phone}/messages`,
+            {
+              messaging_product: "whatsapp",
+              to: receiver.phone,
+              type: "text",
+              text: { body: content, preview_url: false },
+            },
+            {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${sender.whatsapp_api_token}`,
+              },
+            }
+          );
+        } catch (err: any) {
+          waError = err.response?.data || err.message;
+          waStatus = "failed";
+        }
+      } else {
+        return res
+          .status(400)
+          .json({ message: "No content or media provided" });
+      }
+
+      // Save message
+      const chatRepo = AppDataSource.getRepository(Chat);
+      let chat = await chatRepo.findOne({
+        where: [
+          { sender_id, receiver_id },
+          { sender_id: receiver_id, receiver_id: sender_id },
+        ],
+      });
+      if (!chat) {
+        chat = chatRepo.create({ sender_id, receiver_id });
+        await chatRepo.save(chat);
+      }
+
+      const msgRepo = AppDataSource.getRepository(Message);
+      const message = msgRepo.create({
+        user: { id: sender_id } as User,
+        messageable_type: "chat",
+        messageable_id: chat.id,
+        status: waStatus,
+        content: content || media_url,
+        media_type: media_type || null,
+        media_url: media_url || null,
+      });
+      await msgRepo.save(message);
+
+      if (waStatus === "failed") {
+        return res
+          .status(500)
+          .json({ message: "Failed to send via WhatsApp API", error: waError });
+      }
+
+      await LogActivityController.logUserActivity(
+        sender_id,
+        `Sent message to ${receiver.first_name} ${receiver.last_name}`
+      );
+
+      return res.status(201).json({
+        message: "Message sent successfully via WhatsApp API",
+        data: message,
+        wa_response: waResponse?.data,
+      });
+    } catch (error: any) {
+      console.error(
+        "Send message error:",
+        error?.response?.data || error.message
+      );
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
   sendTemplateMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { receiver_id, template_id, variables } = req.body;
@@ -940,30 +1408,100 @@ export const MessageController = {
 
       // 🔹 Get media for the template (if exists)
       const templateMediaRepo = AppDataSource.getRepository(TemplateMedia);
-      const media = await templateMediaRepo.findOne({
+      let media = await templateMediaRepo.findOne({
         where: { template_id: template.id },
       });
+
+      // 🔹 If media exists but doesn't have wa_media_id → upload it first
+      let waMediaId: string | null = null;
+      if (media) {
+        try {
+          const data = new FormData();
+          data.append("messaging_product", "whatsapp");
+
+          let fileStream: fs.ReadStream;
+          let tempFilePath: string | null = null;
+
+          if (media.url && media.url.startsWith("http")) {
+            // Remote file
+            tempFilePath = path.join(
+              os.tmpdir(),
+              `wa_upload_${Date.now()}.png`
+            );
+            const response = await axios.get(media.url, {
+              responseType: "stream",
+            });
+            const writer = fs.createWriteStream(tempFilePath);
+            await new Promise<void>((resolve, reject) => {
+              response.data.pipe(writer);
+              writer.on("finish", resolve);
+              writer.on("error", reject);
+            });
+            fileStream = fs.createReadStream(tempFilePath);
+          } else {
+            // Local file path (from filename in /public or other dir)
+            const localPath = path.isAbsolute(media.filename)
+              ? media.filename
+              : path.join(process.cwd(), "public", media.filename);
+
+            if (!fs.existsSync(localPath)) {
+              return res.status(400).json({ error: "Media file not found" });
+            }
+            fileStream = fs.createReadStream(localPath);
+          }
+
+          data.append("file", fileStream, { contentType: "image/png" }); // adjust type if needed
+          data.append("type", "image/png");
+
+          const uploadRes = await axios.post(
+            `https://graph.facebook.com/v20.0/${sender.whatsapp_business_phone}/media`,
+            data,
+            {
+              headers: {
+                Authorization: `Bearer ${sender.whatsapp_api_token}`,
+                ...data.getHeaders(),
+              },
+            }
+          );
+
+          waMediaId = uploadRes.data.id;
+
+          // Cleanup
+          if (tempFilePath && fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+          }
+
+          // Save mediaId in DB for future use
+          if (!media) {
+            return res.status(400).json({ error: "Template media not found" });
+          }
+
+          (media as TemplateMedia).wa_media_id = waMediaId ?? "";
+          await templateMediaRepo.save(media);
+          await templateMediaRepo.save(media);
+        } catch (uploadErr) {
+          console.error("Media upload failed:", uploadErr);
+          return res
+            .status(500)
+            .json({ message: "Failed to upload media to WhatsApp" });
+        }
+      }
 
       // Prepare WhatsApp API template message payload
       const components: any[] = [];
 
       // Add media header if exists
-      if (media && typeof media.type === "string" && media.wa_media_id) {
+      if (media && waMediaId && typeof media.type === "string") {
         const lowerType = media.type.toLowerCase();
-
         components.push({
           type: "header",
           parameters: [
             {
-              type: lowerType, // "image", "video", "document"
-              image:
-                lowerType === "image" ? { id: media.wa_media_id } : undefined,
-              video:
-                lowerType === "video" ? { id: media.wa_media_id } : undefined,
+              type: lowerType,
+              image: lowerType === "image" ? { id: waMediaId } : undefined,
+              video: lowerType === "video" ? { id: waMediaId } : undefined,
               document:
-                lowerType === "document"
-                  ? { id: media.wa_media_id }
-                  : undefined,
+                lowerType === "document" ? { id: waMediaId } : undefined,
             },
           ],
         });
@@ -986,15 +1524,13 @@ export const MessageController = {
         });
       }
 
-      let waResponse = null;
-      let waError = null;
-      let waStatus = "sent";
-
+      // Send template message
+      let waResponse,
+        waError,
+        waStatus = "sent";
       try {
-        const phoneNumberId = sender.whatsapp_business_phone;
-
         waResponse = await axios.post(
-          `https://graph.facebook.com/v17.0/${phoneNumberId}/messages`,
+          `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
           {
             messaging_product: "whatsapp",
             to: receiver.phone,
@@ -1024,26 +1560,42 @@ export const MessageController = {
         });
       }
 
+      // Save chat & message
       const chatRepository = AppDataSource.getRepository(Chat);
       let chat = await chatRepository.findOne({
         where: [
-          { sender_id: sender_id, receiver_id: receiver_id },
+          { sender_id, receiver_id },
           { sender_id: receiver_id, receiver_id: sender_id },
         ],
       });
-
       if (!chat) {
         chat = chatRepository.create({ sender_id, receiver_id });
         await chatRepository.save(chat);
       }
 
       const messageRepository = AppDataSource.getRepository(Message);
+
+      let messageText = template.message; // e.g. "Hello {{1}}, your order {{2}} is confirmed."
+      if (variables && Array.isArray(variables)) {
+        variables.forEach((variableValue, index) => {
+          const placeholder = new RegExp(`{{${index + 1}}}`, "g");
+          messageText = messageText.replace(
+            placeholder,
+            variableValue.text || ""
+          );
+        });
+      }
+
+      // 5. Save to DB
       const message = messageRepository.create({
         user_id: sender_id,
         messageable_type: "template",
         messageable_id: chat?.id,
         status: waStatus,
-      });
+        content: messageText,
+        media_url: media?.url || null,
+        media_type: media?.type || null,
+      } as any);
       await messageRepository.save(message);
 
       await LogActivityController.logUserActivity(
