@@ -204,7 +204,7 @@ npm run dev
 The server will start with Socket.IO enabled:
 ```
 🚀 Application is listening at port 3000
-🔌 Socket.IO server is ready for real-time connections
+🔌 Socket.IO server is ready for real-time connections Here Man
 ```
 
 ### 2. Test WhatsApp Integration

@@ -572,44 +572,59 @@ export const MessageController = {
   },
 
   // WhatsApp Webhook endpoint for receiving incoming messages
-  receiveWebhook: async (req: Request, res: Response) => {
+  receiveWebhook: async (req: Request, res: Response , io: any , socketConnectedUser:any ) => {
     try {
-      console.log("🔄 Step 1: Webhook received - Processing incoming message");
-      console.log("📥 Webhook payload:", JSON.stringify(req.body, null, 2));
+    console.log("📩 Incoming WhatsApp webhook:", JSON.stringify(req.body, null, 2));
 
-      const body = req.body;
-
-      // Check if this is a WhatsApp webhook event
-      if (body.object === "whatsapp_business_account") {
-        console.log("✅ Valid WhatsApp Business Account webhook detected");
-
-        // Process each entry in the webhook
-        for (const entry of body.entry) {
-          console.log(`📋 Processing entry ID: ${entry.id}`);
-
-          for (const change of entry.changes) {
-            console.log(`🔄 Processing change field: ${change.field}`);
-
-            if (change.field === "messages") {
-              console.log(
-                "📨 Message field detected - calling processIncomingMessage"
-              );
-              await processIncomingMessage(change.value);
-            }
-          }
-        }
+    const entry = req.body.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value;
+    const messages = value?.messages;
+      console.log(23423423);
+    if (messages && messages.length > 0) {
+      const message = messages[0];
+      const from = message.from; // sender's WhatsApp number
+      const type = message.type;
+      console.log(4444);
+      const sendTo = 1;
+      const socketDetail = socketConnectedUser.get(sendTo);
+      console.log(socketDetail);
+      if (socketDetail) {
+       
+        io.to(socketDetail.socketId).emit("recieve-message", { from, type, message });
+        console.log(` Sent message to socket for ${from}`);
       } else {
-        console.log("❌ Invalid webhook object type:", body.object);
+        console.log(` No active socket for ${from}`);
       }
-
-      console.log("✅ Step 5: Returning 200 OK status");
-      // Always respond with 200 OK to acknowledge receipt
-      return res.status(200).send("OK");
-    } catch (error) {
-      console.error("❌ Webhook processing error:", error);
-      return res.status(500).json({ message: "Internal server error" });
     }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Error handling webhook:", error);
+    res.sendStatus(500);
+  }
   },
+
+
+  mediaMessage: async (req: Request, res: Response)=>{
+     try{
+        const file = req.file as Express.Multer.File
+        const filename =  file.filename;
+        const mimeType = file.mimetype;
+        const to = req.body.to;
+        const filePath = path.join(__dirname , "../../../uploads" , filename)
+        const mediaId = await uploadWhatsAppMedia(filePath, mimeType);
+        await sendWhatsAppMedia(to, mediaId, "document");
+        return res.status(200).json({msg : `Message send to user with media id ${mediaId}`})
+     }catch( error ){
+      console.log(error);
+        console.log("HEREERERERE");
+        return res.status(500).json({ message: "Internal server error" , error });
+     }
+  },
+
+  
+
   // sendMessage: async (req: AuthenticatedRequest, res: Response) => {
   //   try {
   //     const { receiver_id, content, template_id, media_url, media_type } =
@@ -2064,3 +2079,50 @@ cron.schedule("* * * * *", async () => {
 
   if (scheduledMessages.length > 0) processBulkQueue();
 });
+
+
+async function uploadWhatsAppMedia(filePath: string, mimeType: string) {
+  const formData = new FormData();
+  formData.append("file", fs.createReadStream(filePath));
+  formData.append("messaging_product", "whatsapp");
+
+  const response = await axios.post(
+    `https://graph.facebook.com/v20.0/140540532486833/media`,
+    formData,
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        ...formData.getHeaders(),
+      },
+    }
+  );
+  console.log(response);
+  return response.data.id; 
+}
+
+
+async function sendWhatsAppMedia(to: string, mediaId: string, type: string) {
+  console.log(to);
+  console.log(mediaId);
+  console.log(type);
+  const response = await axios.post("https://graph.facebook.com/v22.0/140540532486833/messages",
+    {
+      messaging_product: "whatsapp",
+      to,
+      type,
+      [type]: {
+        id: mediaId,
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  console.log(response.status)
+  console.log(response.data)
+  console.log(response.data.message)
+}

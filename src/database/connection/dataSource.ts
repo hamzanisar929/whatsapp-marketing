@@ -15,7 +15,7 @@ export const AppDataSource = new DataSource({
   port: 3308,
   username: "root",
   password: "",
-  database: "whats_app",
+  database: "whatsapp_marketing",
   synchronize: true,
   entities: [
     User,

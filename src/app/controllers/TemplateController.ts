@@ -56,6 +56,13 @@ export const TemplateController = {
     }
   },
 
+
+   showSocketPage : (req: Request, res: Response) =>{
+        
+        const filePath = path.join(__dirname,'../../../public/index.html');
+        res.sendFile(filePath);
+    },
+
   // Uncomment category_id
   // createTemplate: async (req: Request, res: Response) => {
   //   try {

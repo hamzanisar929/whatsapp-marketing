@@ -2,7 +2,21 @@ import express from "express";
 const router = express.Router();
 import "reflect-metadata";
 import multer from "multer";
-const upload = multer({ dest: "uploads/" });
+import path from "path";
+
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "uploads/");
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname); 
+    cb(null, file.fieldname + "-" + uniqueSuffix + ext); // 
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // Import controllers
 import * as AuthController from "../app/controllers/AuthController";
@@ -21,6 +35,8 @@ import {
 } from "../app/middleware/authMiddleware";
 import { UserRole } from "../database/entities/User";
 
+
+module.exports = (io: any, socketConnectedUser: Map<string, any>) => {
 // Auth routes
 router.post("/auth/register", AuthController.register);
 router.post("/auth/login", AuthController.login);
@@ -43,6 +59,11 @@ router.post(
 );
 
 // Template routes
+router.get(
+  "/test-socket",
+  TemplateController.TemplateController.showSocketPage
+);
+
 router.get(
   "/templates",
   authenticate,
@@ -224,9 +245,17 @@ router.get(
   "/webhook/whatsapp",
   MessageController.MessageController.verifyWebhook
 );
+
+
+router.post("/webhook/whatsapp", (req, res) => {
+  MessageController.MessageController.receiveWebhook(req, res, io, socketConnectedUser);
+});
+
+
 router.post(
-  "/webhook/whatsapp",
-  MessageController.MessageController.receiveWebhook
+  "/whatsapp/media-message",
+  upload.single("file"),
+  MessageController.MessageController.mediaMessage
 );
 
 // Log Activity routes
@@ -263,4 +292,7 @@ router.delete(
   LogActivityController.deleteLogActivity
 );
 
-export default router;
+
+return router;
+
+}

@@ -16,7 +16,7 @@
   "license": "ISC",
   "dependencies": {
     "@types/csv-stringify": "^1.4.3",
-    "@types/socket.io": "^3.0.1",
+    "socket.io": "^4.8.1",
     "axios": "^1.6.8",
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",
