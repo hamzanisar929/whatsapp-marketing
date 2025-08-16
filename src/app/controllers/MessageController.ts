@@ -572,58 +572,122 @@ export const MessageController = {
   },
 
   // WhatsApp Webhook endpoint for receiving incoming messages
-  receiveWebhook: async (req: Request, res: Response , io: any , socketConnectedUser:any ) => {
+  receiveWebhook: async (
+    req: Request,
+    res: Response,
+    io: any,
+    socketConnectedUser: any
+  ) => {
     try {
-    console.log("📩 Incoming WhatsApp webhook:", JSON.stringify(req.body, null, 2));
+      console.log(
+        "📩 Incoming WhatsApp webhook:",
+        JSON.stringify(req.body, null, 2)
+      );
 
-    const entry = req.body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const messages = value?.messages;
+      const entry = req.body.entry?.[0];
+      const changes = entry?.changes?.[0];
+      const value = changes?.value;
+      const messages = value?.messages;
       console.log(23423423);
-    if (messages && messages.length > 0) {
-      const message = messages[0];
-      const from = message.from; // sender's WhatsApp number
-      const type = message.type;
-      console.log(4444);
-      const sendTo = 1;
-      const socketDetail = socketConnectedUser.get(sendTo);
-      console.log(socketDetail);
-      if (socketDetail) {
-       
-        io.to(socketDetail.socketId).emit("recieve-message", { from, type, message });
-        console.log(` Sent message to socket for ${from}`);
-      } else {
-        console.log(` No active socket for ${from}`);
+      if (messages && messages.length > 0) {
+        const message = messages[0];
+        const from = message.from; // sender's WhatsApp number
+        const type = message.type;
+        console.log(4444);
+        const sendTo = 1;
+        const socketDetail = socketConnectedUser.get(sendTo);
+        console.log(socketDetail);
+        if (socketDetail) {
+          io.to(socketDetail.socketId).emit("recieve-message", {
+            from,
+            type,
+            message,
+          });
+          console.log(` Sent message to socket for ${from}`);
+        } else {
+          console.log(` No active socket for ${from}`);
+        }
       }
+
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("❌ Error handling webhook:", error);
+      res.sendStatus(500);
     }
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("❌ Error handling webhook:", error);
-    res.sendStatus(500);
-  }
   },
 
+  mediaMessage: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userRepository = AppDataSource.getRepository(User);
+      const file = req.file as Express.Multer.File;
+      const filename = file.filename;
+      const mimeType = file.mimetype;
+      const to = req.body.to;
+      const sender_id = req.user!.id; // assuming you set sender in auth middleware
+      const receiver = await userRepository.findOne({ where: { phone: to } });
+      if (!receiver) {
+        return res.status(404).json({ message: "Receiver not found" });
+      }
 
-  mediaMessage: async (req: Request, res: Response)=>{
-     try{
-        const file = req.file as Express.Multer.File
-        const filename =  file.filename;
-        const mimeType = file.mimetype;
-        const to = req.body.to;
-        const filePath = path.join(__dirname , "../../../uploads" , filename)
-        const mediaId = await uploadWhatsAppMedia(filePath, mimeType);
-        await sendWhatsAppMedia(to, mediaId, "document");
-        return res.status(200).json({msg : `Message send to user with media id ${mediaId}`})
-     }catch( error ){
-      console.log(error);
-        console.log("HEREERERERE");
-        return res.status(500).json({ message: "Internal server error" , error });
-     }
+      const filePath = path.join(__dirname, "../../../uploads", filename);
+
+      // ✅ Upload media to WhatsApp
+      const mediaId = await uploadWhatsAppMedia(filePath, mimeType);
+
+      // ✅ Detect media type
+      let mediaType: "image" | "video" | "document" = "document";
+      if (mimeType.startsWith("image/")) {
+        mediaType = "image";
+      } else if (mimeType.startsWith("video/")) {
+        mediaType = "video";
+      }
+
+      // ✅ Check for existing chat
+      const chatRepo = AppDataSource.getRepository(Chat);
+      let chat = await chatRepo.findOne({
+        where: [
+          { sender_id: sender_id, receiver_id: receiver.id },
+          { sender_id: receiver.id, receiver_id: sender_id },
+        ],
+      });
+
+      // ✅ If no chat, create one
+      if (!chat) {
+        chat = chatRepo.create({
+          sender_id,
+          receiver_id: receiver.id,
+        });
+        await chatRepo.save(chat);
+      }
+
+      // ✅ Save message in DB
+      const messageRepo = AppDataSource.getRepository(Message);
+
+      const message = messageRepo.create({
+        status: "sent",
+        messageable_type: "chat",
+        messageable_id: chat.id,
+        user_id: sender_id,
+        content: undefined, // use undefined instead of null
+        media_url: String(mediaId), // ensure it's stored as string
+        media_type: mediaType,
+      });
+      await messageRepo.save(message);
+
+      // ✅ Send to WhatsApp
+      await sendWhatsAppMedia(to, mediaId, mediaType);
+
+      return res.status(200).json({
+        msg: `Message sent with media id ${mediaId}`,
+        chat_id: chat.id,
+        message_id: message.id,
+        media_type: mediaType,
+      });
+    } catch (error) {
+      console.error("MediaMessage error:", error);
+      return res.status(500).json({ message: "Internal server error", error });
+    }
   },
-
-  
 
   // sendMessage: async (req: AuthenticatedRequest, res: Response) => {
   //   try {
@@ -2080,7 +2144,6 @@ cron.schedule("* * * * *", async () => {
   if (scheduledMessages.length > 0) processBulkQueue();
 });
 
-
 async function uploadWhatsAppMedia(filePath: string, mimeType: string) {
   const formData = new FormData();
   formData.append("file", fs.createReadStream(filePath));
@@ -2097,15 +2160,15 @@ async function uploadWhatsAppMedia(filePath: string, mimeType: string) {
     }
   );
   console.log(response);
-  return response.data.id; 
+  return response.data.id;
 }
-
 
 async function sendWhatsAppMedia(to: string, mediaId: string, type: string) {
   console.log(to);
   console.log(mediaId);
   console.log(type);
-  const response = await axios.post("https://graph.facebook.com/v22.0/140540532486833/messages",
+  const response = await axios.post(
+    "https://graph.facebook.com/v22.0/140540532486833/messages",
     {
       messaging_product: "whatsapp",
       to,
@@ -2122,7 +2185,7 @@ async function sendWhatsAppMedia(to: string, mediaId: string, type: string) {
     }
   );
 
-  console.log(response.status)
-  console.log(response.data)
-  console.log(response.data.message)
+  console.log(response.status);
+  console.log(response.data);
+  console.log(response.data.message);
 }
