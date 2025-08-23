@@ -571,50 +571,42 @@ export const MessageController = {
     }
   },
 
-  // WhatsApp Webhook endpoint for receiving incoming messages
-  receiveWebhook: async (
-    req: Request,
-    res: Response,
-    io: any,
-    socketConnectedUser: any
-  ) => {
+  receiveWebhook: async (req: Request, res: Response , io: any , socketConnectedUser:any ) => {
     try {
-      console.log(
-        "📩 Incoming WhatsApp webhook:",
-        JSON.stringify(req.body, null, 2)
-      );
+    console.log("📩 Incoming WhatsApp webhook:", JSON.stringify(req.body, null, 2));
 
-      const entry = req.body.entry?.[0];
-      const changes = entry?.changes?.[0];
-      const value = changes?.value;
-      const messages = value?.messages;
-      console.log(23423423);
-      if (messages && messages.length > 0) {
-        const message = messages[0];
-        const from = message.from; // sender's WhatsApp number
-        const type = message.type;
-        console.log(4444);
-        const sendTo = 1;
-        const socketDetail = socketConnectedUser.get(sendTo);
-        console.log(socketDetail);
-        if (socketDetail) {
-          io.to(socketDetail.socketId).emit("recieve-message", {
-            from,
-            type,
-            message,
-          });
-          console.log(` Sent message to socket for ${from}`);
-        } else {
-          console.log(` No active socket for ${from}`);
-        }
+    const entry = req.body.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value;
+    const messages = value?.messages;
+
+    if (messages && messages.length > 0) {
+      const message = messages[0];
+      const from = message.from; // sender's WhatsApp number
+      const type = message.type;
+      
+      const userRepository = AppDataSource.getRepository(User);
+      const recieverBusinessNumber =req.body.entry[0].changes[0].value.metadata.phone_number_id
+      const senderNumber = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+      const recieverDetail = await userRepository.findOne({ where: { whatsapp_business_phone : recieverBusinessNumber } });
+      const senderDetail = await userRepository.findOne({ where: { phone : senderNumber } });
+      const socketDetail = socketConnectedUser.get(recieverDetail?.id);
+      
+      if (socketDetail) {
+       
+        io.to(socketDetail.socketId).emit("recieve-message", { from, type, message });
+        console.log(` Sent message to socket for ${from}`);
+      } else {
+        console.log(` No active socket for ${from}`);
       }
-
-      res.sendStatus(200);
-    } catch (error) {
-      console.error("❌ Error handling webhook:", error);
-      res.sendStatus(500);
     }
-  },
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Error handling webhook:", error);
+    res.sendStatus(500);
+  }
+  },
 
   mediaMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
