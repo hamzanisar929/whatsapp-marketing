@@ -24,6 +24,7 @@ import * as TemplateController from "../app/controllers/TemplateController";
 import * as MessageController from "../app/controllers/MessageController";
 import * as CategoryController from "../app/controllers/CategoryController";
 import * as TagController from "../app/controllers/TagController";
+import { ChatController } from "../app/controllers/ChatController";
 import { LogActivityController } from "../app/controllers/LogActivityController";
 
 // Import middleware
@@ -241,6 +242,9 @@ module.exports = (io: any, socketConnectedUser: Map<string, any>) => {
   router.put("/contacts/:id", authenticate, UserController.updateContact);
   router.post("/contacts/:id/tags", authenticate, UserController.tagContact);
   router.get("/contacts", authenticate, UserController.getContacts);
+  
+  // Chat routes
+  router.get("/chats", authenticate, ChatController.getUserChats);
 
   // WhatsApp Webhook routes (no authentication required for webhooks)
   router.get(
