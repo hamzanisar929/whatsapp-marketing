@@ -571,71 +571,95 @@ export const MessageController = {
     }
   },
 
-  // WhatsApp Webhook endpoint for receiving incoming messages
-  receiveWebhook: async (
-    req: Request,
-    res: Response,
-    io: any,
-    socketConnectedUser: any
-  ) => {
+  receiveWebhook: async (req: Request, res: Response , io: any , socketConnectedUser:any ) => {
     try {
-      console.log(
-        "📩 Incoming WhatsApp webhook:",
-        JSON.stringify(req.body, null, 2)
-      );
 
-      const entry = req.body.entry?.[0];
-      const changes = entry?.changes?.[0];
-      const value = changes?.value;
-      const messages = value?.messages;
-      console.log(23423423);
-      if (messages && messages.length > 0) {
-        const message = messages[0];
-        const from = message.from; // sender's WhatsApp number
-        const type = message.type;
-        console.log(4444);
-        const sendTo = 1;
-        const socketDetail = socketConnectedUser.get(sendTo);
-        console.log(socketDetail);
-        if (socketDetail) {
-          io.to(socketDetail.socketId).emit("recieve-message", {
-            from,
-            type,
-            message,
-          });
-          console.log(` Sent message to socket for ${from}`);
-        } else {
-          console.log(` No active socket for ${from}`);
+    const entry = req.body.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value;
+    const messages = value?.messages;
+
+    if (messages && messages.length > 0) {
+      const message = messages[0];
+      const content = message.text.body;
+      const from = message.from; 
+      const type = message.type;
+      
+      const userRepository = AppDataSource.getRepository(User);
+      const chatRepository = AppDataSource.getRepository(Chat);
+      const messageRepository = AppDataSource.getRepository(Message);
+      const recieverBusinessNumber =req.body.entry[0].changes[0].value.metadata.phone_number_id
+      const senderNumber = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+      const recieverDetail = await userRepository.findOne({ where: { whatsapp_business_phone : recieverBusinessNumber } });
+      const senderDetail = await userRepository.findOne({ where: { phone : senderNumber } });
+      
+
+      if(senderDetail && recieverDetail){
+        
+        let chatDetail = await chatRepository.findOne({
+                            where: [
+                              { sender_id: senderDetail.id, receiver_id: recieverDetail.id },
+                              { sender_id: recieverDetail.id, receiver_id: senderDetail.id },
+                            ],
+                          })
+        
+        if(!chatDetail){
+          const newChat = new Chat();
+          newChat.sender_id = senderDetail?.id;
+          newChat.receiver_id = recieverDetail?.id;
+          chatDetail = await chatRepository.save(newChat);
         }
+        
+        await messageRepository.insert({ 
+                            status : 'recieve', 
+                            messageable_type : 'chat',
+                            messageable_id : chatDetail?.id, 
+                            user_id : senderDetail?.id,  
+                            content : content
+                          });
       }
-
-      res.sendStatus(200);
-    } catch (error) {
-      console.error("❌ Error handling webhook:", error);
-      res.sendStatus(500);
+      
+      const socketDetail = socketConnectedUser.get(recieverDetail?.id);
+      
+      if (socketDetail) {
+       
+        io.to(socketDetail.socketId).emit("recieve-message", { from, type, message });
+        console.log(` Sent message to socket for ${from}`);
+      } else {
+        console.log(` No active socket for ${from}`);
+      }
     }
-  },
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Error handling webhook:", error);
+    res.sendStatus(500);
+  }
+  },
 
   mediaMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const userRepository = AppDataSource.getRepository(User);
+      const chatRepository = AppDataSource.getRepository(Chat);
       const file = req.file as Express.Multer.File;
       const filename = file.filename;
       const mimeType = file.mimetype;
       const to = req.body.to;
       const sender_id = req.user!.id; // assuming you set sender in auth middleware
       const receiver = await userRepository.findOne({ where: { phone: to } });
+
+      
       if (!receiver) {
         return res.status(404).json({ message: "Receiver not found" });
       }
 
       const filePath = path.join(__dirname, "../../../uploads", filename);
 
-      // ✅ Upload media to WhatsApp
+      
       const mediaId = await uploadWhatsAppMedia(filePath, mimeType);
 
-      // ✅ Detect media type
       let mediaType: "image" | "video" | "document" = "document";
+
       if (mimeType.startsWith("image/")) {
         mediaType = "image";
       } else if (mimeType.startsWith("video/")) {
@@ -651,7 +675,7 @@ export const MessageController = {
         ],
       });
 
-      // ✅ If no chat, create one
+      
       if (!chat) {
         chat = chatRepo.create({
           sender_id,
@@ -674,7 +698,7 @@ export const MessageController = {
       });
       await messageRepo.save(message);
 
-      // ✅ Send to WhatsApp
+      
       await sendWhatsAppMedia(to, mediaId, mediaType);
 
       return res.status(200).json({
