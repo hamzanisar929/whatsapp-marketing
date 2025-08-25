@@ -4,7 +4,7 @@ import { Message } from "../../database/entities/Message";
 import { Template } from "../../database/entities/Template";
 import { User, UserRole } from "../../database/entities/User";
 import { Chat } from "../../database/entities/Chat";
-import { Code, LessThanOrEqual } from "typeorm";
+import { Code, In, LessThanOrEqual } from "typeorm";
 import axios from "axios";
 import { parse } from "csv-parse";
 import fs from "fs";
@@ -20,10 +20,6 @@ import FormData from "form-data";
 declare global {
   var socketServer: SocketServer;
 }
-
-// interface AuthenticatedRequest extends Request {
-//   user: { id: number };
-// }
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -221,9 +217,6 @@ async function processIncomingMessage(messageData: any) {
         media_url,
         media_type,
         is_scheduled: false,
-        // Note: created_at will be automatically set by @CreateDateColumn
-        // Store WhatsApp message ID for reference
-        // wa_message_id: wa_message_id // You might want to add this field to Message entity
       });
 
       await messageRepository.save(incomingMessage);
@@ -288,168 +281,6 @@ async function processIncomingMessage(messageData: any) {
     console.error("❌ Error processing incoming message:", error);
   }
 }
-
-// Also uncomment bulkqueue .push in sendbulkmessage controller
-// async function sendBulkJob(job: any) {
-//   const { sender_id, receiver, content, template_id, variables, attempt } = job;
-//   console.log("Sending bulk message:", job);
-//   try {
-//     // Use the same logic as sendMessage/sendTemplateMessage
-//     const userRepository = AppDataSource.getRepository(User);
-//     const sender = await userRepository.findOne({ where: { id: sender_id } });
-//     if (
-//       !sender ||
-//       !sender.whatsapp_api_token ||
-//       !sender.whatsapp_business_phone
-//     ) {
-//       job.status = "failed";
-//       job.error = "Sender WhatsApp API config missing";
-//       return;
-//     }
-//     let waResponse = null;
-//     let waStatus = "sent";
-//     if (template_id) {
-//       // Template message
-//       const templateRepository = AppDataSource.getRepository(Template);
-//       const template = await templateRepository.findOne({
-//         where: { id: template_id },
-//         relations: ["variables"],
-//       });
-//       if (!template) {
-//         job.status = "failed";
-//         job.error = "Template not found";
-//         return;
-//       }
-//       const components = [];
-//       if (template.variables && variables) {
-//         const params = template.variables.map((v: any) => ({
-//           type: "text",
-//           text: variables[v.name] || v.default_value || "",
-//         }));
-//         components.push({ type: "body", parameters: params });
-//       }
-//       waResponse = await axios.post(
-//         `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-//         {
-//           messaging_product: "whatsapp",
-//           to: receiver.phone,
-//           type: "template",
-//           template: {
-//             name: template.name,
-//             language: { code: template.language },
-//             components,
-//           },
-//         },
-//         {
-//           headers: {
-//             Authorization: `Bearer ${sender.whatsapp_api_token}`,
-//             "Content-Type": "application/json",
-//           },
-//         }
-//       );
-//     } else {
-//       // Plain text message
-//       waResponse = await axios.post(
-//         `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-//         {
-//           messaging_product: "whatsapp",
-//           to: receiver.phone,
-//           type: "text",
-//           text: { body: content },
-//         },
-//         {
-//           headers: {
-//             Authorization: `Bearer ${sender.whatsapp_api_token}`,
-//             "Content-Type": "application/json",
-//           },
-//         }
-//       );
-//     }
-//     job.status = "sent";
-//     job.wa_response = waResponse?.data;
-//   } catch (err: any) {
-//     job.status = "failed";
-//     job.error = err.response?.data || err.message;
-//     if ((job.attempt || 1) < MAX_RETRIES) {
-//       // Retry
-//       bulkQueue.push({ ...job, attempt: (job.attempt || 1) + 1 });
-//     }
-//   }
-// }
-
-// async function sendBulkJob(job: any) {
-//   const { sender_id, receiver, content, variables, attempt } = job;
-//   console.log("Sending bulk message:", job);
-//   try {
-//     // Use the same logic as sendMessage/sendTemplateMessage
-//     const userRepository = AppDataSource.getRepository(User);
-//     const sender = await userRepository.findOne({ where: { id: sender_id } });
-//     if (
-//       !sender ||
-//       !sender.whatsapp_api_token ||
-//       !sender.whatsapp_business_phone
-//     ) {
-//       job.status = "failed";
-//       job.error = "Sender WhatsApp API config missing";
-//       return;
-//     }
-//     let waResponse = null;
-//     let waStatus = "sent";
-//     // Plain text message
-//     waResponse = await axios.post(
-//       `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-//       {
-//         messaging_product: "whatsapp",
-//         to: receiver.phone,
-//         type: "text",
-//         text: { body: content },
-//       },
-//       {
-//         headers: {
-//           Authorization: `Bearer ${sender.whatsapp_api_token}`,
-//           "Content-Type": "application/json",
-//         },
-//       }
-//     );
-//     job.status = "sent";
-//     job.wa_response = waResponse?.data;
-//     console.log(job.wa_response);
-
-//     const messageRepository = AppDataSource.getRepository(Message);
-
-//     if (job.scheduled_message_id) {
-//       const existingMessage = await messageRepository.findOne({
-//         where: { id: job.scheduled_message_id },
-//       });
-//       if (existingMessage) {
-//         existingMessage.status = "sent";
-//         await messageRepository.save(existingMessage);
-//         return;
-//       }
-//     }
-
-//     const contactUser = await userRepository.findOne({
-//       where: { phone: receiver.phone },
-//     });
-
-//     const messageable_id = contactUser?.id || 0;
-
-//     await messageRepository.save({
-//       user_id: sender_id,
-//       messageable_type: "chat",
-//       messageable_id,
-//       status: waStatus,
-//       content: content,
-//     });
-//   } catch (err: any) {
-//     job.status = "failed";
-//     job.error = err.response?.data || err.message;
-//     if ((job.attempt || 1) < MAX_RETRIES) {
-//       // Retry
-//       bulkQueue.push({ ...job, attempt: (job.attempt || 1) + 1 });
-//     }
-//   }
-// }
 
 async function sendBulkJob(job: any) {
   const {
@@ -571,71 +402,82 @@ export const MessageController = {
     }
   },
 
-  receiveWebhook: async (req: Request, res: Response , io: any , socketConnectedUser:any ) => {
+  receiveWebhook: async (
+    req: Request,
+    res: Response,
+    io: any,
+    socketConnectedUser: any
+  ) => {
     try {
+      const entry = req.body.entry?.[0];
+      const changes = entry?.changes?.[0];
+      const value = changes?.value;
+      const messages = value?.messages;
 
-    const entry = req.body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const messages = value?.messages;
+      if (messages && messages.length > 0) {
+        const message = messages[0];
+        const content = message.text.body;
+        const from = message.from;
+        const type = message.type;
 
-    if (messages && messages.length > 0) {
-      const message = messages[0];
-      const content = message.text.body;
-      const from = message.from; 
-      const type = message.type;
-      
-      const userRepository = AppDataSource.getRepository(User);
-      const chatRepository = AppDataSource.getRepository(Chat);
-      const messageRepository = AppDataSource.getRepository(Message);
-      const recieverBusinessNumber =req.body.entry[0].changes[0].value.metadata.phone_number_id
-      const senderNumber = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
-      const recieverDetail = await userRepository.findOne({ where: { whatsapp_business_phone : recieverBusinessNumber } });
-      const senderDetail = await userRepository.findOne({ where: { phone : senderNumber } });
-      
+        const userRepository = AppDataSource.getRepository(User);
+        const chatRepository = AppDataSource.getRepository(Chat);
+        const messageRepository = AppDataSource.getRepository(Message);
+        const recieverBusinessNumber =
+          req.body.entry[0].changes[0].value.metadata.phone_number_id;
+        const senderNumber =
+          req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+        const recieverDetail = await userRepository.findOne({
+          where: { whatsapp_business_phone: recieverBusinessNumber },
+        });
+        const senderDetail = await userRepository.findOne({
+          where: { phone: senderNumber },
+        });
 
-      if(senderDetail && recieverDetail){
-        
-        let chatDetail = await chatRepository.findOne({
-                            where: [
-                              { sender_id: senderDetail.id, receiver_id: recieverDetail.id },
-                              { sender_id: recieverDetail.id, receiver_id: senderDetail.id },
-                            ],
-                          })
-        
-        if(!chatDetail){
-          const newChat = new Chat();
-          newChat.sender_id = senderDetail?.id;
-          newChat.receiver_id = recieverDetail?.id;
-          chatDetail = await chatRepository.save(newChat);
+        if (senderDetail && recieverDetail) {
+          let chatDetail = await chatRepository.findOne({
+            where: [
+              { sender_id: senderDetail.id, receiver_id: recieverDetail.id },
+              { sender_id: recieverDetail.id, receiver_id: senderDetail.id },
+            ],
+          });
+
+          if (!chatDetail) {
+            const newChat = new Chat();
+            newChat.sender_id = senderDetail?.id;
+            newChat.receiver_id = recieverDetail?.id;
+            chatDetail = await chatRepository.save(newChat);
+          }
+
+          await messageRepository.insert({
+            status: "recieve",
+            messageable_type: "chat",
+            messageable_id: chatDetail?.id,
+            user_id: senderDetail?.id,
+            content: content,
+          });
         }
-        
-        await messageRepository.insert({ 
-                            status : 'recieve', 
-                            messageable_type : 'chat',
-                            messageable_id : chatDetail?.id, 
-                            user_id : senderDetail?.id,  
-                            content : content
-                          });
-      }
-      
-      const socketDetail = socketConnectedUser.get(recieverDetail?.id);
-      
-      if (socketDetail) {
-       
-        io.to(socketDetail.socketId).emit("recieve-message", { from, type, message });
-        console.log(` Sent message to socket for ${from}`);
-      } else {
-        console.log(` No active socket for ${from}`);
-      }
-    }
 
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("❌ Error handling webhook:", error);
-    res.sendStatus(500);
-  }
-  },
+        const socketDetail = socketConnectedUser.get(recieverDetail?.id);
+
+        if (socketDetail) {
+          io.to(socketDetail.socketId).emit("recieve-message", {
+            from,
+            type,
+            message,
+          });
+          console.log(` Sent message to socket for ${from}`);
+        } else {
+          console.log(` No active socket for ${from}`);
+        }
+      }
+
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("❌ Error handling webhook:", error);
+      res.sendStatus(500);
+    }
+  },
 
   mediaMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -648,14 +490,12 @@ export const MessageController = {
       const sender_id = req.user!.id; // assuming you set sender in auth middleware
       const receiver = await userRepository.findOne({ where: { phone: to } });
 
-      
       if (!receiver) {
         return res.status(404).json({ message: "Receiver not found" });
       }
 
       const filePath = path.join(__dirname, "../../../uploads", filename);
 
-      
       const mediaId = await uploadWhatsAppMedia(filePath, mimeType);
 
       let mediaType: "image" | "video" | "document" = "document";
@@ -675,7 +515,6 @@ export const MessageController = {
         ],
       });
 
-      
       if (!chat) {
         chat = chatRepo.create({
           sender_id,
@@ -698,7 +537,6 @@ export const MessageController = {
       });
       await messageRepo.save(message);
 
-      
       await sendWhatsAppMedia(to, mediaId, mediaType);
 
       return res.status(200).json({
@@ -715,584 +553,124 @@ export const MessageController = {
 
   // sendMessage: async (req: AuthenticatedRequest, res: Response) => {
   //   try {
-  //     const { receiver_id, content, template_id, media_url, media_type } =
-  //       req.body;
-  //     const sender_id = req.user!.id;
-
-  //     const userRepository = AppDataSource.getRepository(User);
-  //     const receiver = await userRepository.findOne({
-  //       where: { id: receiver_id },
-  //     });
-  //     const sender = await userRepository.findOne({ where: { id: sender_id } });
-
-  //     if (!receiver) {
-  //       return res.status(404).json({ message: "Receiver not found" });
-  //     }
-
-  //     if (
-  //       !sender ||
-  //       !sender.whatsapp_api_token ||
-  //       !sender.whatsapp_business_phone
-  //     ) {
-  //       return res
-  //         .status(400)
-  //         .json({ message: "Sender WhatsApp API config missing" });
-  //     }
-
-  //     let waResponse = null;
-  //     let waError = null;
-  //     let waStatus = "sent";
-
-  //     try {
-  //       const headers = {
-  //         Authorization: `Bearer ${sender.whatsapp_api_token}`,
-  //         "Content-Type": "application/json",
-  //       };
-
-  //       if (media_url && media_type) {
-  //         // Handle media message with optional caption
-  //         let mediaPayload: any = {
-  //           messaging_product: "whatsapp",
-  //           to: receiver.phone,
-  //           type: media_type,
-  //         };
-
-  //         const supportedMediaTypes = ["image", "video", "document"];
-
-  //         if (!supportedMediaTypes.includes(media_type)) {
-  //           return res.status(400).json({ message: "Unsupported media type" });
-  //         }
-
-  //         // Attach media with optional caption
-  //         mediaPayload[media_type] = {
-  //           link: media_url,
-  //           ...(content ? { caption: content } : {}),
-  //         };
-
-  //         waResponse = await axios.post(
-  //           `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-  //           mediaPayload,
-  //           { headers }
-  //         );
-  //       } else if (content) {
-  //         // Plain text message only
-  //         waResponse = await axios.post(
-  //           `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-  //           {
-  //             messaging_product: "whatsapp",
-  //             to: receiver.phone,
-  //             type: "text",
-  //             text: { body: content, preview_url: false },
-  //           },
-  //           { headers }
-  //         );
-  //       } else {
-  //         return res
-  //           .status(400)
-  //           .json({ message: "No content or media provided" });
-  //       }
-  //     } catch (err: any) {
-  //       waError = err.response?.data || err.message;
-  //       waStatus = "failed";
-  //     }
-
-  //     // Get or create chat between sender and receiver
-  //     const chatRepository = AppDataSource.getRepository(Chat);
-  //     let chat = await chatRepository.findOne({
-  //       where: [
-  //         { sender_id, receiver_id },
-  //         { sender_id: receiver_id, receiver_id: sender_id },
-  //       ],
-  //     });
-
-  //     if (!chat) {
-  //       chat = chatRepository.create({ sender_id, receiver_id });
-  //       await chatRepository.save(chat);
-  //     }
-
-  //     // Save message
-  //     const messageRepository = AppDataSource.getRepository(Message);
-  //     const message = messageRepository.create({
-  //       user_id: sender_id,
-  //       messageable_type: "chat",
-  //       messageable_id: chat.id,
-  //       status: waStatus,
-  //       content: content || media_url,
-  //       media_type: media_type || null,
-  //       media_url: media_url || null,
-  //     });
-  //     await messageRepository.save(message);
-
-  //     if (waStatus === "failed") {
-  //       return res.status(500).json({
-  //         message: "Failed to send via WhatsApp API",
-  //         error: waError,
-  //       });
-  //     }
-
-  //     // Log user activity
-  //     try {
-  //       await LogActivityController.logUserActivity(
-  //         sender_id,
-  //         `Sent message to ${receiver.first_name} ${receiver.last_name}`
-  //       );
-  //     } catch (logError) {
-  //       console.error("Failed to log user activity:", logError);
-  //     }
-
-  //     return res.status(201).json({
-  //       message: "Message sent successfully via WhatsApp API",
-  //       data: message,
-  //       wa_response: waResponse?.data,
-  //     });
-  //   } catch (error) {
-  //     console.error("Send message error:", error);
-  //     return res.status(500).json({ message: "Internal server error" });
-  //   }
-  // },
-
-  // Send template Message add chat functionality
-  // sendTemplateMessage: async (req: AuthenticatedRequest, res: Response) => {
-  //   try {
-  //     const { receiver_id, template_id, variables } = req.body;
-  //     const sender_id = req.user!.id;
-
-  //     const userRepository = AppDataSource.getRepository(User);
-  //     const receiver = await userRepository.findOne({
-  //       where: { id: receiver_id },
-  //     });
-  //     const sender = await userRepository.findOne({ where: { id: sender_id } });
-
-  //     if (!receiver) {
-  //       return res.status(404).json({ message: "Receiver not found" });
-  //     }
-  //     if (
-  //       !sender ||
-  //       !sender.whatsapp_api_token ||
-  //       !sender.whatsapp_business_phone
-  //     ) {
-  //       return res
-  //         .status(400)
-  //         .json({ message: "Sender WhatsApp API config missing" });
-  //     }
-
-  //     const templateRepository = AppDataSource.getRepository(Template);
-  //     const template = await templateRepository.findOne({
-  //       where: { id: template_id },
-  //       relations: ["variables"],
-  //     });
-
-  //     if (!template) {
-  //       return res.status(404).json({ message: "Template not found" });
-  //     }
-
-  //     // Prepare WhatsApp API template message payload
-  //     const components = [];
-  //     // if (template.variables && variables) {
-  //     //   const params = template.variables.map((v: any) => ({
-  //     //     type: "text",
-  //     //     text: variables[v.name] || v.default_value || "",
-  //     //   }));
-  //     //   components.push({
-  //     //     type: "body",
-  //     //     parameters: params,
-  //     //   });
-  //     // }
-
-  //     if (variables && Array.isArray(variables)) {
-  //       components.push({
-  //         type: "body",
-  //         parameters: variables,
-  //       });
-  //     } else if (template.variables && variables) {
-  //       const params = template.variables.map((v: any) => ({
-  //         type: "text",
-  //         text: variables[v.name] || v.default_value || "",
-  //       }));
-  //       components.push({
-  //         type: "body",
-  //         parameters: params,
-  //       });
-  //     }
-
-  //     let waResponse = null;
-  //     let waError = null;
-  //     let waStatus = "sent";
-  //     try {
-  //       // First, get the WhatsApp Business Account ID
-  //       const wbaResponse = await axios.get(
-  //         `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}`,
-  //         {
-  //           headers: {
-  //             Authorization: `Bearer ${sender.whatsapp_api_token}`,
-  //             "Content-Type": "application/json",
-  //           },
-  //         }
-  //       );
-
-  //       const phoneNumberId = sender.whatsapp_business_phone;
-
-  //       // Send the template message using the phone number ID
-  //       // Note: For sending messages, we use the phone number ID, not the business account ID
-  //       waResponse = await axios.post(
-  //         `https://graph.facebook.com/v17.0/${phoneNumberId}/messages`,
-  //         {
-  //           messaging_product: "whatsapp",
-  //           to: receiver.phone,
-  //           type: "template",
-  //           template: {
-  //             name: template.name,
-  //             language: { code: template.language },
-  //             components,
-  //           },
-  //         },
-  //         {
-  //           headers: {
-  //             Authorization: `Bearer ${sender.whatsapp_api_token}`,
-  //             "Content-Type": "application/json",
-  //           },
-  //         }
-  //       );
-  //       waStatus = "sent";
-  //     } catch (err: any) {
-  //       waError = err.response?.data || err.message;
-  //       waStatus = "failed";
-  //     }
-
-  //     if (waStatus === "failed") {
-  //       return res.status(500).json({
-  //         message: "Failed to send template via WhatsApp API",
-  //         error: waError,
-  //       });
-  //     }
-
-  //     const chatRepository = AppDataSource.getRepository(Chat);
-  //     let chat = await chatRepository.findOne({
-  //       where: [
-  //         { sender_id: sender_id, receiver_id: receiver_id },
-  //         { sender_id: receiver_id, receiver_id: sender_id },
-  //       ],
-  //     });
-
-  //     if (!chat) {
-  //       chat = chatRepository.create({ sender_id, receiver_id });
-  //       await chatRepository.save(chat);
-  //     }
-
-  //     const messageRepository = AppDataSource.getRepository(Message);
-  //     const message = messageRepository.create({
-  //       user_id: sender_id,
-  //       messageable_type: "template",
-  //       messageable_id: chat?.id,
-  //       status: waStatus,
-  //     });
-  //     await messageRepository.save(message);
-
-  //     // Log user activity
-  //     try {
-  //       await LogActivityController.logUserActivity(
-  //         sender_id,
-  //         `Sent template message '${template.name}' to ${receiver.first_name} ${receiver.last_name}`
-  //       );
-  //     } catch (logError) {
-  //       console.error("Failed to log user activity:", logError);
-  //     }
-
-  //     return res.status(201).json({
-  //       message: "Template message sent successfully via WhatsApp API",
-  //       data: message,
-  //       wa_response: waResponse?.data,
-  //     });
-  //   } catch (error) {
-  //     console.error("Send template message error:", error);
-  //     return res.status(500).json({ message: "Internal server error" });
-  //   }
-  // },
-
-  // Sending Media Templates
-  // sendTemplateMessage: async (req: AuthenticatedRequest, res: Response) => {
-  //   try {
-  //     const { receiver_id, template_id, variables } = req.body;
-  //     const sender_id = req.user!.id;
-
-  //     const userRepository = AppDataSource.getRepository(User);
-  //     const receiver = await userRepository.findOne({
-  //       where: { id: receiver_id },
-  //     });
-  //     const sender = await userRepository.findOne({ where: { id: sender_id } });
-
-  //     if (!receiver) {
-  //       return res.status(404).json({ message: "Receiver not found" });
-  //     }
-  //     if (
-  //       !sender ||
-  //       !sender.whatsapp_api_token ||
-  //       !sender.whatsapp_business_phone
-  //     ) {
-  //       return res
-  //         .status(400)
-  //         .json({ message: "Sender WhatsApp API config missing" });
-  //     }
-
-  //     const templateRepository = AppDataSource.getRepository(Template);
-  //     const template = await templateRepository.findOne({
-  //       where: { id: template_id },
-  //       relations: ["variables"],
-  //     });
-
-  //     if (!template) {
-  //       return res.status(404).json({ message: "Template not found" });
-  //     }
-
-  //     // 🔹 Get media for the template (if exists)
-  //     const templateMediaRepo = AppDataSource.getRepository(TemplateMedia);
-  //     const media = await templateMediaRepo.findOne({
-  //       where: { template_id: template.id },
-  //     });
-
-  //     // Prepare WhatsApp API template message payload
-  //     const components: any[] = [];
-
-  //     // Add media header if exists
-  //     if (media && typeof media.type === "string" && media.wa_media_id) {
-  //       const lowerType = media.type.toLowerCase();
-
-  //       components.push({
-  //         type: "header",
-  //         parameters: [
-  //           {
-  //             type: lowerType, // "image", "video", "document"
-  //             image:
-  //               lowerType === "image" ? { id: media.wa_media_id } : undefined,
-  //             video:
-  //               lowerType === "video" ? { id: media.wa_media_id } : undefined,
-  //             document:
-  //               lowerType === "document"
-  //                 ? { id: media.wa_media_id }
-  //                 : undefined,
-  //           },
-  //         ],
-  //       });
-  //     }
-
-  //     // Add body variables
-  //     if (variables && Array.isArray(variables)) {
-  //       components.push({
-  //         type: "body",
-  //         parameters: variables,
-  //       });
-  //     } else if (template.variables && variables) {
-  //       const params = template.variables.map((v: any) => ({
-  //         type: "text",
-  //         text: variables[v.name] || v.default_value || "",
-  //       }));
-  //       components.push({
-  //         type: "body",
-  //         parameters: params,
-  //       });
-  //     }
-
-  //     let waResponse = null;
-  //     let waError = null;
-  //     let waStatus = "sent";
-
-  //     try {
-  //       const phoneNumberId = sender.whatsapp_business_phone;
-
-  //       waResponse = await axios.post(
-  //         `https://graph.facebook.com/v17.0/${phoneNumberId}/messages`,
-  //         {
-  //           messaging_product: "whatsapp",
-  //           to: receiver.phone,
-  //           type: "template",
-  //           template: {
-  //             name: template.name,
-  //             language: { code: template.language },
-  //             components,
-  //           },
-  //         },
-  //         {
-  //           headers: {
-  //             Authorization: `Bearer ${sender.whatsapp_api_token}`,
-  //             "Content-Type": "application/json",
-  //           },
-  //         }
-  //       );
-  //     } catch (err: any) {
-  //       waError = err.response?.data || err.message;
-  //       waStatus = "failed";
-  //     }
-
-  //     if (waStatus === "failed") {
-  //       return res.status(500).json({
-  //         message: "Failed to send template via WhatsApp API",
-  //         error: waError,
-  //       });
-  //     }
-
-  //     const chatRepository = AppDataSource.getRepository(Chat);
-  //     let chat = await chatRepository.findOne({
-  //       where: [
-  //         { sender_id: sender_id, receiver_id: receiver_id },
-  //         { sender_id: receiver_id, receiver_id: sender_id },
-  //       ],
-  //     });
-
-  //     if (!chat) {
-  //       chat = chatRepository.create({ sender_id, receiver_id });
-  //       await chatRepository.save(chat);
-  //     }
-
-  //     const messageRepository = AppDataSource.getRepository(Message);
-  //     const message = messageRepository.create({
-  //       user_id: sender_id,
-  //       messageable_type: "template",
-  //       messageable_id: chat?.id,
-  //       status: waStatus,
-  //     });
-  //     await messageRepository.save(message);
-
-  //     await LogActivityController.logUserActivity(
-  //       sender_id,
-  //       `Sent template message '${template.name}' to ${receiver.first_name} ${receiver.last_name}`
-  //     );
-
-  //     return res.status(201).json({
-  //       message: "Template message sent successfully via WhatsApp API",
-  //       data: message,
-  //       wa_response: waResponse?.data,
-  //     });
-  //   } catch (error) {
-  //     console.error("Send template message error:", error);
-  //     return res.status(500).json({ message: "Internal server error" });
-  //   }
-  // },
-
-  // sendMessage: async (req: AuthenticatedRequest, res: Response) => {
-  //   try {
   //     const { receiver_id, content, media_url, media_type } = req.body;
   //     const sender_id = req.user!.id;
 
-  //     const userRepository = AppDataSource.getRepository(User);
-  //     const receiver = await userRepository.findOne({
-  //       where: { id: receiver_id },
-  //     });
-  //     const sender = await userRepository.findOne({ where: { id: sender_id } });
+  //     // validate user & target
+  //     const userRepo = AppDataSource.getRepository(User);
+  //     const receiver = await userRepo.findOne({ where: { id: receiver_id } });
+  //     const sender = await userRepo.findOne({ where: { id: sender_id } });
 
   //     if (!receiver)
   //       return res.status(404).json({ message: "Receiver not found" });
-  //     if (!sender?.whatsapp_api_token || !sender?.whatsapp_business_phone)
+  //     if (!sender?.whatsapp_api_token || !sender?.whatsapp_business_phone) {
   //       return res
   //         .status(400)
   //         .json({ message: "Sender WhatsApp API config missing" });
+  //     }
 
   //     let waStatus = "sent";
-  //     let waResponse = null;
   //     let waError = null;
-  //     const headers = { Authorization: `Bearer ${sender.whatsapp_api_token}` };
+  //     let waResponse = null;
 
-  //     try {
-  //       if (media_url && media_type) {
-  //         const supportedMediaTypes = ["image", "video", "document"];
-  //         if (!supportedMediaTypes.includes(media_type)) {
-  //           return res.status(400).json({ message: "Unsupported media type" });
+  //     // HTTPS upload & send
+  //     if (media_url && media_type) {
+  //       const supportedMedia = ["image", "video", "document"];
+  //       if (!supportedMedia.includes(media_type)) {
+  //         return res.status(400).json({ message: "Unsupported media type" });
+  //       }
+
+  //       let mediaId: string | null = null;
+  //       const phoneId = sender.whatsapp_business_phone;
+  //       const authHeader = {
+  //         Authorization: `Bearer ${sender.whatsapp_api_token}`,
+  //       };
+
+  //       if (!media_url.startsWith("http")) {
+  //         // Upload local file first
+  //         const filePath = path.isAbsolute(media_url)
+  //           ? media_url
+  //           : path.join(process.cwd(), media_url);
+  //         if (!fs.existsSync(filePath)) {
+  //           return res.status(400).json({ message: "Media file not found" });
   //         }
 
-  //         let mediaId = null;
+  //         const form = new FormData();
+  //         form.append("file", fs.createReadStream(filePath));
+  //         form.append("type", media_type);
+  //         form.append("messaging_product", "whatsapp");
 
-  //         // Step 1 — Upload media to WhatsApp
-  //         if (!media_url.startsWith("http")) {
-  //           // Local file — upload
-  //           const filePath = path.isAbsolute(media_url)
-  //             ? media_url
-  //             : path.join(process.cwd(), media_url);
-  //           if (!fs.existsSync(filePath)) {
-  //             return res.status(400).json({ message: "Media file not found" });
-  //           }
-
-  //           const formData = new FormData();
-  //           formData.append("file", fs.createReadStream(filePath));
-  //           formData.append("type", media_type);
-  //           formData.append("messaging_product", "whatsapp");
-
-  //           const uploadRes = await axios.post(
-  //             `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/media`,
-  //             formData,
-  //             {
-  //               headers: {
-  //                 ...formData.getHeaders(),
-  //                 Authorization: `Bearer ${sender.whatsapp_api_token}`,
-  //               },
-  //             }
-  //           );
-  //           mediaId = uploadRes.data.id;
-  //         } else {
-  //           // Remote file — try using direct link
-  //           mediaId = null; // we can send by link without upload
-  //         }
-
-  //         // Step 2 — Send media message
-  //         let mediaPayload: any = {
-  //           messaging_product: "whatsapp",
-  //           to: receiver.phone,
-  //           type: media_type,
-  //         };
-
-  //         if (mediaId) {
-  //           mediaPayload[media_type] = {
-  //             id: mediaId,
-  //             ...(content ? { caption: content } : {}),
-  //           };
-  //         } else {
-  //           mediaPayload[media_type] = {
-  //             link: media_url,
-  //             ...(content ? { caption: content } : {}),
-  //           };
-  //         }
-
-  //         waResponse = await axios.post(
-  //           `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
-  //           mediaPayload,
-  //           { headers: { ...headers, "Content-Type": "application/json" } }
+  //         const uploadRes = await axios.post(
+  //           `https://graph.facebook.com/v20.0/${phoneId}/media`,
+  //           form,
+  //           { headers: { ...form.getHeaders(), ...authHeader } }
   //         );
-  //       } else if (content) {
-  //         // Plain text
+  //         mediaId = uploadRes.data.id;
+  //         console.log(mediaId);
+  //       }
+
+  //       const payload: any = {
+  //         messaging_product: "whatsapp",
+  //         to: receiver.phone,
+  //         type: media_type,
+  //       };
+  //       payload[media_type] = mediaId
+  //         ? { id: mediaId, ...(content ? { caption: content } : {}) }
+  //         : { link: media_url, ...(content ? { caption: content } : {}) };
+
+  //       try {
   //         waResponse = await axios.post(
-  //           `https://graph.facebook.com/v17.0/${sender.whatsapp_business_phone}/messages`,
+  //           `https://graph.facebook.com/v20.0/${phoneId}/messages`,
+  //           payload,
+  //           { headers: { "Content-Type": "application/json", ...authHeader } }
+  //         );
+  //       } catch (err: any) {
+  //         waError = err.response?.data || err.message;
+  //         waStatus = "failed";
+  //       }
+  //     } else if (content) {
+  //       // Text only path
+  //       try {
+  //         waResponse = await axios.post(
+  //           `https://graph.facebook.com/v20.0/${sender.whatsapp_business_phone}/messages`,
   //           {
   //             messaging_product: "whatsapp",
   //             to: receiver.phone,
   //             type: "text",
   //             text: { body: content, preview_url: false },
   //           },
-  //           { headers: { ...headers, "Content-Type": "application/json" } }
+  //           {
+  //             headers: {
+  //               "Content-Type": "application/json",
+  //               Authorization: `Bearer ${sender.whatsapp_api_token}`,
+  //             },
+  //           }
   //         );
-  //       } else {
-  //         return res
-  //           .status(400)
-  //           .json({ message: "No content or media provided" });
+  //       } catch (err: any) {
+  //         waError = err.response?.data || err.message;
+  //         waStatus = "failed";
   //       }
-  //     } catch (err: any) {
-  //       waError = err.response?.data || err.message;
-  //       waStatus = "failed";
+  //     } else {
+  //       return res
+  //         .status(400)
+  //         .json({ message: "No content or media provided" });
   //     }
 
-  //     // Get or create chat
-  //     const chatRepository = AppDataSource.getRepository(Chat);
-  //     let chat = await chatRepository.findOne({
+  //     // Save message
+  //     const chatRepo = AppDataSource.getRepository(Chat);
+  //     let chat = await chatRepo.findOne({
   //       where: [
   //         { sender_id, receiver_id },
   //         { sender_id: receiver_id, receiver_id: sender_id },
   //       ],
   //     });
   //     if (!chat) {
-  //       chat = chatRepository.create({ sender_id, receiver_id });
-  //       await chatRepository.save(chat);
+  //       chat = chatRepo.create({ sender_id, receiver_id });
+  //       await chatRepo.save(chat);
   //     }
 
-  //     // Save message
-  //     const messageRepository = AppDataSource.getRepository(Message);
-  //     const message = messageRepository.create({
+  //     const msgRepo = AppDataSource.getRepository(Message);
+  //     const message = msgRepo.create({
   //       user: { id: sender_id } as User,
   //       messageable_type: "chat",
   //       messageable_id: chat.id,
@@ -1301,7 +679,7 @@ export const MessageController = {
   //       media_type: media_type || null,
   //       media_url: media_url || null,
   //     });
-  //     await messageRepository.save(message);
+  //     await msgRepo.save(message);
 
   //     if (waStatus === "failed") {
   //       return res
@@ -1309,20 +687,28 @@ export const MessageController = {
   //         .json({ message: "Failed to send via WhatsApp API", error: waError });
   //     }
 
+  //     await LogActivityController.logUserActivity(
+  //       sender_id,
+  //       `Sent message to ${receiver.first_name} ${receiver.last_name}`
+  //     );
+
   //     return res.status(201).json({
   //       message: "Message sent successfully via WhatsApp API",
   //       data: message,
   //       wa_response: waResponse?.data,
   //     });
-  //   } catch (error) {
-  //     console.error("Send message error:", error);
+  //   } catch (error: any) {
+  //     console.error(
+  //       "Send message error:",
+  //       error?.response?.data || error.message
+  //     );
   //     return res.status(500).json({ message: "Internal server error" });
   //   }
   // },
 
   sendMessage: async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { receiver_id, content, media_url, media_type } = req.body;
+      const { receiver_id, content } = req.body;
       const sender_id = req.user!.id;
 
       // validate user & target
@@ -1338,94 +724,37 @@ export const MessageController = {
           .json({ message: "Sender WhatsApp API config missing" });
       }
 
+      if (!content) {
+        return res.status(400).json({ message: "No content provided" });
+      }
+
       let waStatus = "sent";
       let waError = null;
       let waResponse = null;
 
-      // HTTPS upload & send
-      if (media_url && media_type) {
-        const supportedMedia = ["image", "video", "document"];
-        if (!supportedMedia.includes(media_type)) {
-          return res.status(400).json({ message: "Unsupported media type" });
-        }
-
-        let mediaId: string | null = null;
-        const phoneId = sender.whatsapp_business_phone;
-        const authHeader = {
-          Authorization: `Bearer ${sender.whatsapp_api_token}`,
-        };
-
-        if (!media_url.startsWith("http")) {
-          // Upload local file first
-          const filePath = path.isAbsolute(media_url)
-            ? media_url
-            : path.join(process.cwd(), media_url);
-          if (!fs.existsSync(filePath)) {
-            return res.status(400).json({ message: "Media file not found" });
-          }
-
-          const form = new FormData();
-          form.append("file", fs.createReadStream(filePath));
-          form.append("type", media_type);
-          form.append("messaging_product", "whatsapp");
-
-          const uploadRes = await axios.post(
-            `https://graph.facebook.com/v20.0/${phoneId}/media`,
-            form,
-            { headers: { ...form.getHeaders(), ...authHeader } }
-          );
-          mediaId = uploadRes.data.id;
-          console.log(mediaId);
-        }
-
-        const payload: any = {
-          messaging_product: "whatsapp",
-          to: receiver.phone,
-          type: media_type,
-        };
-        payload[media_type] = mediaId
-          ? { id: mediaId, ...(content ? { caption: content } : {}) }
-          : { link: media_url, ...(content ? { caption: content } : {}) };
-
-        try {
-          waResponse = await axios.post(
-            `https://graph.facebook.com/v20.0/${phoneId}/messages`,
-            payload,
-            { headers: { "Content-Type": "application/json", ...authHeader } }
-          );
-        } catch (err: any) {
-          waError = err.response?.data || err.message;
-          waStatus = "failed";
-        }
-      } else if (content) {
-        // Text only path
-        try {
-          waResponse = await axios.post(
-            `https://graph.facebook.com/v20.0/${sender.whatsapp_business_phone}/messages`,
-            {
-              messaging_product: "whatsapp",
-              to: receiver.phone,
-              type: "text",
-              text: { body: content, preview_url: false },
+      // Text only path
+      try {
+        waResponse = await axios.post(
+          `https://graph.facebook.com/v20.0/${sender.whatsapp_business_phone}/messages`,
+          {
+            messaging_product: "whatsapp",
+            to: receiver.phone,
+            type: "text",
+            text: { body: content, preview_url: false },
+          },
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${sender.whatsapp_api_token}`,
             },
-            {
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${sender.whatsapp_api_token}`,
-              },
-            }
-          );
-        } catch (err: any) {
-          waError = err.response?.data || err.message;
-          waStatus = "failed";
-        }
-      } else {
-        return res
-          .status(400)
-          .json({ message: "No content or media provided" });
+          }
+        );
+      } catch (err: any) {
+        waError = err.response?.data || err.message;
+        waStatus = "failed";
       }
 
-      // Save message
+      // Save message in DB
       const chatRepo = AppDataSource.getRepository(Chat);
       let chat = await chatRepo.findOne({
         where: [
@@ -1440,20 +769,22 @@ export const MessageController = {
 
       const msgRepo = AppDataSource.getRepository(Message);
       const message = msgRepo.create({
-        user: { id: sender_id } as User,
+        user_id: sender_id,
         messageable_type: "chat",
         messageable_id: chat.id,
         status: waStatus,
-        content: content || media_url,
-        media_type: media_type || null,
-        media_url: media_url || null,
-      });
+        content,
+        media_url: null,
+        media_type: null,
+      } as any);
+
       await msgRepo.save(message);
 
       if (waStatus === "failed") {
-        return res
-          .status(500)
-          .json({ message: "Failed to send via WhatsApp API", error: waError });
+        return res.status(500).json({
+          message: "Failed to send via WhatsApp API",
+          error: waError,
+        });
       }
 
       await LogActivityController.logUserActivity(
@@ -1717,57 +1048,34 @@ export const MessageController = {
     }
   },
 
-  // sendBulkMessages: async (req: AuthenticatedRequest, res: Response) => {
-  //   try {
-  //     const { csv_data, content, template_id } = req.body;
-  //     const sender_id = req.user!.id;
-  //     if (!csv_data || !Array.isArray(csv_data) || csv_data.length === 0) {
-  //       return res
-  //         .status(400)
-  //         .json({ message: "CSV data required for bulk messaging" });
-  //     }
-  //     // Each csv_data item: { phone: '...', var1: '...', ... }
-  //     for (const row of csv_data) {
-  //       bulkQueue.push({
-  //         sender_id,
-  //         receiver: { phone: row.phone },
-  //         content,
-  //         // template_id,
-  //         variables: row,
-  //         attempt: 1,
-  //       });
-  //     }
-  //     processBulkQueue();
-  //     return res.status(200).json({
-  //       message: `Bulk messages queued: ${csv_data.length}`,
-  //     });
-  //   } catch (error) {
-  //     console.error("Send bulk messages error:", error);
-  //     return res.status(500).json({ message: "Internal server error" });
-  //   }
-  // },
-
   sendBulkMessages: async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { user_ids, content, media_url, media_type } = req.body;
+      const { csv_data, content, media_url, media_type } = req.body;
       const sender_id = req.user!.id;
 
-      if ((!content && !media_url) || !user_ids || user_ids.length === 0) {
+      if ((!content && !media_url) || !csv_data || csv_data.length === 0) {
         return res.status(400).json({
           message:
-            "At least one of 'content' or 'media_url' and non-empty 'user_ids' are required",
+            "At least one of 'content' or 'media_url' and non-empty 'csv_data' are required",
         });
       }
 
       const userRepository = AppDataSource.getRepository(User);
       const chatRepository = AppDataSource.getRepository(Chat);
 
-      const users = await userRepository.findByIds(user_ids);
+      // Extract phone numbers from csv_data
+      // Extract phone numbers from csv_data
+      const phones = csv_data.map((entry: any) => entry.phone);
+
+      // Get users by phone
+      const users = await userRepository.find({
+        where: { phone: In(phones) },
+      });
 
       if (!users || users.length === 0) {
-        return res
-          .status(404)
-          .json({ message: "No valid users found for the provided user_ids" });
+        return res.status(404).json({
+          message: "No valid users found for the provided phone numbers",
+        });
       }
 
       for (const user of users) {
@@ -1910,61 +1218,6 @@ export const MessageController = {
     }
   },
 
-  // scheduleMessage: async (req: AuthenticatedRequest, res: Response) => {
-  //   try {
-  //     const { receiver_id, content, template_id, variables, scheduled_at } =
-  //       req.body;
-  //     const sender_id = req.user!.id;
-  //     if (!receiver_id || !scheduled_at) {
-  //       return res
-  //         .status(400)
-  //         .json({ message: "receiver_id and scheduled_at are required" });
-  //     }
-  //     const userRepository = AppDataSource.getRepository(User);
-  //     const receiver = await userRepository.findOne({
-  //       where: { id: receiver_id },
-  //     });
-  //     if (!receiver) {
-  //       return res.status(404).json({ message: "Receiver not found" });
-  //     }
-  //     const chatRepository = AppDataSource.getRepository(Chat);
-
-  //     let chat = await chatRepository.findOne({
-  //       where: [
-  //         { sender_id: sender_id, receiver_id: receiver_id },
-  //         { sender_id: receiver_id, receiver_id: sender_id },
-  //       ],
-  //     });
-
-  //     if (!chat) {
-  //       chat = chatRepository.create({ sender_id, receiver_id });
-  //       await chatRepository.save(chat);
-  //     }
-
-  //     const messageRepository = AppDataSource.getRepository(Message);
-  //     const message = messageRepository.create({
-  //       user_id: sender_id,
-  //       messageable_type: "chat",
-  //       messageable_id: chat.id,
-  //       status: "scheduled",
-  //       content,
-  //       is_scheduled: true,
-  //       scheduled_at: new Date(scheduled_at),
-  //       // Optionally store template_id and variables for template messages
-  //       ...(template_id && { template_id }),
-  //       ...(variables && { variables }),
-  //     });
-  //     await messageRepository.save(message);
-  //     return res.status(201).json({
-  //       message: "Message scheduled successfully",
-  //       data: message,
-  //     });
-  //   } catch (error) {
-  //     console.error("Schedule message error:", error);
-  //     return res.status(500).json({ message: "Internal server error" });
-  //   }
-  // },
-
   sendTemplateMessageTest: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { WHATSAPP_ACCESS_TOKEN } = process.env;
@@ -2004,28 +1257,6 @@ export const MessageController = {
         return res.status(500).json({ error: "Internal server error" });
       }
     }
-    // console.log(process.env.WHATSAPP_ACCESS_TOKEN);
-    // const response = await axios({
-    //   url: `https://graph.facebook.com/v20.0/140540532486833/messages`,
-    //   method: "post",
-    //   headers: {
-    //     Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-    //     "Content-Type": "application/json",
-    //   },
-    //   data: JSON.stringify({
-    //     messaging_product: "whatsapp",
-    //     to: "923309266288",
-    //     type: "template",
-    //     template: {
-    //       name: "hello_world",
-    //       language: {
-    //         code: "en_US",
-    //       },
-    //     },
-    //   }),
-    // });
-
-    // console.log(response);
   },
 
   scheduleMessage: async (req: AuthenticatedRequest, res: Response) => {

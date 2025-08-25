@@ -94,7 +94,10 @@ export const updateUser = async (
 
     // Log user activity
     try {
-      await LogActivityController.logUserActivity(Number(id), `User profile updated`);
+      await LogActivityController.logUserActivity(
+        Number(id),
+        `User profile updated`
+      );
     } catch (logError) {
       console.error("Failed to log user activity:", logError);
     }
@@ -125,7 +128,10 @@ export const deleteUser = async (
 
     // Log user activity before deletion
     try {
-      await LogActivityController.logUserActivity(Number(id), `User account deleted`);
+      await LogActivityController.logUserActivity(
+        Number(id),
+        `User account deleted`
+      );
     } catch (logError) {
       console.error("Failed to log user activity:", logError);
     }
@@ -173,7 +179,10 @@ export const changePassword = async (
 
     // Log user activity
     try {
-      await LogActivityController.logUserActivity(Number(id), `Password changed`);
+      await LogActivityController.logUserActivity(
+        Number(id),
+        `Password changed`
+      );
     } catch (logError) {
       console.error("Failed to log user activity:", logError);
     }
@@ -197,7 +206,10 @@ export const setWhatsAppConfig = async (req: Request, res: Response) => {
 
     // Log user activity
     try {
-      await LogActivityController.logUserActivity(userId, `WhatsApp configuration updated`);
+      await LogActivityController.logUserActivity(
+        userId,
+        `WhatsApp configuration updated`
+      );
     } catch (logError) {
       console.error("Failed to log user activity:", logError);
     }
@@ -241,41 +253,6 @@ export const verifyFacebookBusiness = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-
-// export const importContactsCSV = async (req: any, res: Response) => {
-//   try {
-//     if (!req.file) {
-//       return res.status(400).json({ message: "No file uploaded" });
-//     }
-//     const filePath = req.file.path;
-//     const userRepository = AppDataSource.getRepository(User);
-//     const results: any[] = [];
-//     const parser = fs
-//       .createReadStream(filePath)
-//       .pipe(parse({ columns: true, trim: true }));
-//     for await (const record of parser) {
-//       // { first_name, last_name, email, phone, opt_in }
-//       let user = await userRepository.findOne({
-//         where: { phone: record.phone },
-//       });
-//       if (!user) {
-//         // user = userRepository.create(record) as User;
-//         if (user) await userRepository.save(user);
-//       } else {
-//         Object.assign(user, record);
-//         await userRepository.save(user);
-//       }
-//       if (user) results.push(user);
-//     }
-//     fs.unlinkSync(filePath);
-//     return res
-//       .status(200)
-//       .json({ message: "Contacts imported", data: results });
-//   } catch (error) {
-//     console.error("Import contacts error:", error);
-//     return res.status(500).json({ message: "Internal server error" });
-//   }
-// };
 
 export const importContactsCSV = async (req: any, res: Response) => {
   try {
@@ -324,7 +301,10 @@ export const importContactsCSV = async (req: any, res: Response) => {
     try {
       const authReq = req as any;
       if (authReq.user?.id) {
-        await LogActivityController.logUserActivity(authReq.user.id, `Imported ${results.length} contacts from CSV`);
+        await LogActivityController.logUserActivity(
+          authReq.user.id,
+          `Imported ${results.length} contacts from CSV`
+        );
       }
     } catch (logError) {
       console.error("Failed to log user activity:", logError);
@@ -382,7 +362,10 @@ export const updateContact = async (req: Request, res: Response) => {
     try {
       const authReq = req as any;
       if (authReq.user?.id) {
-        await LogActivityController.logUserActivity(authReq.user.id, `Updated contact: ${user.first_name} ${user.last_name}`);
+        await LogActivityController.logUserActivity(
+          authReq.user.id,
+          `Updated contact: ${user.first_name} ${user.last_name}`
+        );
       }
     } catch (logError) {
       console.error("Failed to log user activity:", logError);
